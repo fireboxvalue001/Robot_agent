@@ -42,6 +42,7 @@ let latestPhysicalValidation = null;
 let activeExternalPlanId = null;
 let latestSemanticSource = { type: "live" };
 let semanticResultStale = false;
+let localPlanningInProgress = false;
 let executionRecords = [];
 let executionRun = {
   status: "not_started",
@@ -386,7 +387,7 @@ function bindStaticEvents() {
     receiveSemanticParameters(event.detail, { type: "live" });
   });
   window.addEventListener("autolab:planner-result", (event) => {
-    receivePlannerResult(event.detail);
+    receivePlannerResult(event.detail, "同事B通过MQTT返回");
   });
   window.addEventListener("autolab:physical-validation", (event) => {
     receivePhysicalValidation(event.detail);
@@ -428,14 +429,15 @@ function receiveSemanticParameters(message, source = { type: "live" }) {
   else showToast("预处理字段已载入，可以生成实验流程");
 }
 
-function receivePlannerResult(message) {
+function receivePlannerResult(message, sourceLabel = "外部任务编排接口返回") {
   latestPlannerMessage = message && typeof message === "object" ? message : null;
   latestPhysicalValidation = null;
   activeExternalPlanId = null;
   workflow = [];
   resetExecutionState();
   if (!latestPlannerMessage || latestPlannerMessage.status === "failed") {
-    lastAnalysis = { matched: false, message: "外部任务编排失败。", factors: [] };
+    const warnings = Array.isArray(latestPlannerMessage?.warnings) ? latestPlannerMessage.warnings : [];
+    lastAnalysis = { matched: false, message: warnings.join("；") || "任务编排失败。", factors: [] };
     renderAll();
     showToast(lastAnalysis.message);
     return;
@@ -475,7 +477,7 @@ function receivePlannerResult(message) {
       id: planned.stepId,
       operation,
       params: planned.arguments || {},
-      source: "同事B通过MQTT返回",
+      source: sourceLabel,
       evidence: [`planId: ${chain.planId}`],
       dependsOn: planned.dependsOn || []
     });
@@ -492,8 +494,8 @@ function receivePlannerResult(message) {
   taskId = chain.planId;
   lastAnalysis = {
     matched: true,
-    message: `已载入同事B编排的 ${workflow.length} 个元操作。`,
-    factors: [`外部计划：${chain.planId}`, `能力库版本：${chain.capabilityLibrary.version}`]
+    message: `已载入编排接口生成的 ${workflow.length} 个元操作。`,
+    factors: [`计划：${chain.planId}`, `来源：${sourceLabel}`, `能力库版本：${chain.capabilityLibrary.version}`]
   };
   renderAll();
   showToast(lastAnalysis.message);
@@ -682,11 +684,8 @@ function checkCapabilityCoverage(text) {
   return reasons;
 }
 
-function generateWorkflowFromPreprocessing() {
+async function generateWorkflowFromPreprocessing() {
   const text = $("intent-input").value.trim();
-  workflow = [];
-  resetExecutionState();
-
   if (!text) {
     lastAnalysis = { matched: false, message: "没有输入总体意图。", factors: [] };
     renderAll();
@@ -697,10 +696,52 @@ function generateWorkflowFromPreprocessing() {
   const isMqttSemanticResult = latestSemanticSource.type === "live" &&
     typeof latestSemanticMessage?.workflowId === "string" &&
     typeof latestSemanticMessage?.msgId === "string";
-  if (isMqttSemanticResult && !latestPlannerMessage) {
-    lastAnalysis = { matched: false, message: "预处理已完成，正在等待同事B返回元操作链。", factors: [] };
+  if (isMqttSemanticResult) {
+    if (latestPlannerMessage) {
+      receivePlannerResult(latestPlannerMessage, "同事B通过MQTT返回");
+    } else {
+      lastAnalysis = { matched: false, message: "预处理已完成，正在等待同事B返回元操作链。", factors: [] };
+      renderAll();
+      showToast(lastAnalysis.message);
+    }
+    return;
+  }
+  if (localPlanningInProgress) return;
+
+  localPlanningInProgress = true;
+  $("parse-intent").disabled = true;
+  lastAnalysis = { matched: false, message: "正在通过自然语言编排接口生成流程...", factors: [] };
+  renderAll();
+  try {
+    const response = await fetch("/api/v1/planning/from-text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
+    if (result.preprocessing) {
+      receiveSemanticParameters(result.preprocessing, { type: "local_api" });
+    }
+    receivePlannerResult(result, "本地自然语言编排接口");
+  } catch (error) {
+    showToast(`后端编排接口不可用，已切换到前端降级规则：${error.message || error}`);
+    generateWorkflowLocally();
+  } finally {
+    localPlanningInProgress = false;
+    $("parse-intent").disabled = false;
+  }
+}
+
+function generateWorkflowLocally() {
+  const text = $("intent-input").value.trim();
+  workflow = [];
+  resetExecutionState();
+
+  if (!text) {
+    lastAnalysis = { matched: false, message: "没有输入总体意图。", factors: [] };
     renderAll();
-    showToast(lastAnalysis.message);
+    showToast("请输入总体操作意图");
     return;
   }
 
@@ -1345,6 +1386,7 @@ function renderIntentSummary() {
   const sourceLabels = {
     history: "历史语义记录",
     local: "自然语言本地提取",
+    local_api: "自然语言编排接口",
     live: "实时 MQTT 回包"
   };
   const sourceChips = latestSemanticMessage

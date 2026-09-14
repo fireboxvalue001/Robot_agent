@@ -57,18 +57,23 @@ global.CustomEvent = class CustomEvent {
   }
 };
 
-global.fetch = async (resource) => ({
-  ok: true,
-  json: async () => JSON.parse(fs.readFileSync(path.join(
-    root,
-    "data",
-    String(resource).includes("meta-operations")
-      ? "meta-operations.json"
-      : (String(resource).includes("spatial-locations")
-        ? "spatial-locations.json"
-        : "vd10_agent_only_operation_tree.json")
-  ), "utf8"))
-});
+global.fetch = async (resource) => {
+  if (String(resource).includes("/api/v1/planning/from-text")) {
+    return { ok: false, status: 503, json: async () => ({ detail: "test fallback" }) };
+  }
+  return {
+    ok: true,
+    json: async () => JSON.parse(fs.readFileSync(path.join(
+      root,
+      "data",
+      String(resource).includes("meta-operations")
+        ? "meta-operations.json"
+        : (String(resource).includes("spatial-locations")
+          ? "spatial-locations.json"
+          : "vd10_agent_only_operation_tree.json")
+    ), "utf8"))
+  };
+};
 
 require(path.join(root, "app.js"));
 
@@ -95,7 +100,7 @@ function setIntent(text) {
   if (input.listeners.input) input.listeners.input();
 }
 
-setTimeout(() => {
+setTimeout(async () => {
   const semantic = elements.get("semantic-flow");
   const parseButton = elements.get("parse-intent");
   const defaultText = elements.get("intent-input").value;
@@ -142,12 +147,12 @@ setTimeout(() => {
   assert(elements.get("spatial-location-list").innerHTML.includes("三楼电梯出梯点"), "floor-3 elevator stop should be visible");
   assert(elements.get("spatial-location-list").innerHTML.includes("小车一楼至三楼电梯运输"), "elevator route should be visible");
   assert(!semantic.innerHTML.includes("样品定量分装"), "workflow must wait for MQTT preprocessing");
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(elements.get("intent-state").textContent.includes("需要补充信息"), "incomplete direct input must request required fields");
 
   const directText = "请将桌上的样品分成4份，每份25 mL；样品保持静置，无需摇匀；使用试管盛装，并分别送到4台VD10仪器中进行检测。";
   setIntent(directText);
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(elements.get("intent-summary").innerHTML.includes("来源：自然语言本地提取"), "direct input should show local preprocessing source");
   assert(semantic.innerHTML.includes("样品定量分装"), "complete direct natural language should generate workflow");
   assert(semantic.innerHTML.includes("VD10样品检测"), "direct input should select VD10 testing");
@@ -172,7 +177,7 @@ setTimeout(() => {
   });
   assert(elements.get("intent-summary").innerHTML.includes("最低样品体积：25 mL"), "preprocessing fields should be visible");
   assert(elements.get("intent-summary").innerHTML.includes("缺少字段：instrument_requirement"), "missing fields should be visible");
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(!semantic.innerHTML.includes("样品定量分装"), "incomplete preprocessing must not produce workflow");
 
   dispatchSemantic(defaultText, {
@@ -181,7 +186,7 @@ setTimeout(() => {
     sample_volume_requirement: { type: "number", value: 25, unit: "mL" },
     instrument_requirement: { type: "string", value: "试管" }
   });
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.includes("样品定量分装"), "complete result should select sample aliquoting");
   assert(semantic.innerHTML.includes("试管装载至AGV"), "complete result should load tubes onto AGV");
   assert(semantic.innerHTML.includes("AGV工位间样品运输"), "complete result should select AGV transport");
@@ -215,6 +220,7 @@ setTimeout(() => {
       }
     }
   }));
+  await new Promise((resolve) => setImmediate(resolve));
   assert(elements.get("intent-input").value === historyText, "history loading should restore original text");
   assert(elements.get("intent-summary").innerHTML.includes("来源：历史语义记录"), "history source should be visible");
   assert(semantic.innerHTML.includes("样品定量分装"), "history loading should regenerate with the current library");
@@ -229,12 +235,12 @@ setTimeout(() => {
     instrument_requirement: { type: "string", value: "试管" },
     destination_floor: { type: "string", value: "2楼" }
   });
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.indexOf("非联网仪器屏幕数据读取") < semantic.innerHTML.indexOf("实验室跨区域转运"), "final transfer must occur after result acquisition");
   assert(semantic.innerHTML.includes("执行时序：检测后"), "post-test timing should be visible");
 
   setIntent(`${floorText}，请尽快`);
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(elements.get("intent-state").textContent.includes("需要补充信息"), "edited text should be preprocessed again and request missing fields");
   assert(elements.get("intent-summary").innerHTML.includes("来源：自然语言本地提取"), "edited text should not reuse stale MQTT fields");
   assert(!semantic.innerHTML.includes("VD10样品检测"), "incomplete local preprocessing must not produce workflow");
@@ -247,7 +253,7 @@ setTimeout(() => {
     sample_volume_requirement: { type: "number", value: 50, unit: "mL" },
     instrument_requirement: { type: "string", value: "试管" }
   });
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.includes("样品定时加热"), "heating should select the basic heating operation");
   assert(semantic.innerHTML.includes("目标温度：50"), "heating should preserve target temperature");
   assert(semantic.innerHTML.includes("持续时间：3600"), "heating should convert minutes to seconds");
@@ -255,7 +261,7 @@ setTimeout(() => {
 
   const mixingText = "将样品使用试管盛装，以300 rpm摇匀2分钟，每份最低25 mL";
   setIntent(mixingText);
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.includes("样品摇匀混合"), "mixing intent should select the mixing operation");
   assert(semantic.innerHTML.includes("持续时间：120"), "mixing duration should be normalized to seconds");
   assert(semantic.innerHTML.includes("转速：300"), "mixing speed should be preserved");
@@ -268,7 +274,7 @@ setTimeout(() => {
     instrument_requirement: { type: "string", value: "微波炉" },
     test_item_description: { type: "string", value: "加热到100°" }
   });
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.includes("样品摇匀混合"), "combined task should include mixing without a fixed duration");
   assert(semantic.innerHTML.includes("样品定时加热"), "combined task should include heating with a degree symbol");
   assert(semantic.innerHTML.includes("目标温度：100"), "bare degree symbol should preserve temperature");
@@ -277,14 +283,14 @@ setTimeout(() => {
 
   const holdingText = "将25 mL样品使用试管盛装，在检录台静置10分钟";
   setIntent(holdingText);
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.includes("样品定时静置"), "timed holding intent should select the holding operation");
   assert(semantic.innerHTML.includes("持续时间：600"), "holding duration should be normalized to seconds");
   assert(elements.get("physical-flow").innerHTML.includes("仍为占位坐标"), "placeholder locations must block physical readiness");
 
   const transferText = "请让机械臂将物体从检录台搬运到VD10工位";
   setIntent(transferText);
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(semantic.innerHTML.includes("机械臂物体点到点搬运"), "robot transfer intent should select physical displacement");
   assert(semantic.innerHTML.includes("lab.location.sample_checkin_station"), "transfer should use the check-in location id");
   assert(semantic.innerHTML.includes("lab.location.vd10_station"), "transfer should use the VD10 location id");
@@ -301,7 +307,7 @@ setTimeout(() => {
       timestamp: Date.now()
     }
   }));
-  parseButton.listeners.click();
+  await parseButton.listeners.click();
   assert(elements.get("intent-state").textContent.includes("等待同事B"), "MQTT semantic input must wait for the external planner");
   assert(!semantic.innerHTML.includes("样品定量分装"), "MQTT semantic input must not fall back to local keyword planning");
 

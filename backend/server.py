@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .asr_service import detect_voice_format, transcribe_with_tencent_cloud
 from .mqtt_service import mqtt_service
+from .planning_service import plan_natural_language
 
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -51,6 +52,11 @@ class AsrTimingRequest(BaseModel):
 class UiInputRequest(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
     asrTiming: AsrTimingRequest | None = None
+
+
+class NaturalLanguagePlanningRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)
+    workflowId: str | None = Field(default=None, pattern=r"^wf_")
 
 
 def capability_snapshot(path: Path, item_key: str) -> dict:
@@ -95,6 +101,11 @@ def get_meta_operation_capabilities() -> dict:
 @app.get("/api/v1/capabilities/spatial-locations")
 def get_spatial_location_capabilities() -> dict:
     return capability_snapshot(SPATIAL_LOCATION_LIBRARY, "locations")
+
+
+@app.post("/api/v1/planning/from-text")
+def plan_from_natural_language(request: NaturalLanguagePlanningRequest) -> dict:
+    return plan_natural_language(request.text, workflow_id=request.workflowId)
 
 
 @app.post("/api/asr/transcribe")

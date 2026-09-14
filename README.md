@@ -77,7 +77,17 @@ MQTT_HISTORY_DIR=
 
 确认输入框文字后点击“发送语义处理”。后端严格按照上游规范发布 `autolab/ui/input`，并订阅 `autolab/semantic/params`。两条消息通过上游规定的 `workflowId` 关联，收到的语义结果保持原始 JSON；其中 `parameters`、缺失字段和澄清问题会同步显示在“预处理结果”区域。
 
-可以直接输入自然语言并点击“生成实验流程”。没有对应 MQTT 结果或文字已经修改时，界面会在本地提取数量、体积、样品处理要求、容器、目标设备和楼层等字段；已有对应 MQTT 结果时则优先使用 MQTT 字段。随后统一检查字段完整性和元操作能力覆盖，检查通过才会按照分装、装载、运输、仪器操作和后续转运等依赖关系生成任务链；不支持的能力会明确阻断，不生成猜测性的替代流程。
+可以直接输入自然语言并点击“生成实验流程”。界面调用同源的 `POST /api/v1/planning/from-text`，后端提取数量、体积、样品处理、目标设备和楼层等字段，并依据当前元操作能力库生成标准 `planner_result`。接口不可用时，界面才使用原有前端规则降级。已有实时 MQTT 预处理结果时仍等待同事 B 返回操作链，不会用本地编排覆盖外部流程。
+
+自然语言编排接口最小请求：
+
+```json
+{
+  "text": "将桌上的样品分成4份，每份25ml，送到VD10进行检测"
+}
+```
+
+可选传入以 `wf_` 开头的 `workflowId`。成功响应直接使用现有 `planner_result` 字段和 `operationChain` 契约，并额外携带 `preprocessing` 供界面展示。缺少分装体积、加热温度或静置时长时返回 `status=failed` 和澄清问题；无法匹配能力时不会强制路由到设备。
 
 当前已接收 `autolab/planner/result` 和 `autolab/physical/validation`。真实MQTT预处理结果不会再触发本地关键词编排：界面等待同事B返回带元操作ID的 `operationChain`，再等待物理校验模块返回逐步结论。详细契约见 `docs/MODULE_INTERFACE_HANDOFF.md`。
 

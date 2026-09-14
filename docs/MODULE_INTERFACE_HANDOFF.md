@@ -31,6 +31,27 @@ GET http://<UI主机>:8877/api/v1/capabilities/spatial-locations
 
 并原样写入 `operationChain.capabilityLibrary`。任意一项与UI当前能力库不一致，规划结果都会被拒绝，避免使用过期ID。
 
+## 2.1 本地自然语言编排接口
+
+在同事 A/B 的完整服务就绪前，UI 可以直接把自然语言交给本项目的独立编排接口：
+
+```text
+POST http://<UI主机>:8877/api/v1/planning/from-text
+Content-Type: application/json
+```
+
+最小输入：
+
+```json
+{
+  "text": "将桌上的样品分成4份，每份25ml，送到VD10进行检测"
+}
+```
+
+需要关联已有任务时可增加 `workflowId`，其值必须以 `wf_` 开头。响应直接复用 `schemas/planner-result.schema.json`，成功时包含当前能力库身份和有序 `operationChain`，同时额外返回 `preprocessing` 用于UI展示。该接口不发布 MQTT，不改变 `autolab/ui/input`、`autolab/semantic/params` 或 `autolab/planner/result` 的既有约定。
+
+当前实现是确定性规则编排，适合界面验证和接口联调。真实系统接入同事 B 后，MQTT 返回的外部操作链仍作为正式结果；所有草案、预留接口和未绑定硬件仍需进入物理可执行确认。
+
 ## 3. 同事A输入输出
 
 输入Topic：`autolab/ui/input`。核心业务输入是 `text`，语音输入可能额外包含 `asrTiming`。
