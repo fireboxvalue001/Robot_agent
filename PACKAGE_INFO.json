@@ -1,0 +1,61 @@
+{
+  "package_name": "vd10_experiment_task_workflow",
+  "display_name": "VD10 实验任务编排台",
+  "version": "0.3.0",
+  "owner_module": "VD10 实验任务编排与执行模拟",
+  "entrypoint": "index.html",
+  "default_url": "http://localhost:8877",
+  "runtime": {
+    "frontend_dependencies": [],
+    "local_server": "FastAPI and Uvicorn",
+    "python_environment": ".venv",
+    "asr_provider": "Tencent Cloud SentenceRecognition",
+    "browser_audio_format": "16kHz mono PCM WAV",
+    "mqtt_client": "paho-mqtt",
+    "mqtt_topics": [
+      "autolab/ui/input",
+      "autolab/semantic/params",
+      "autolab/planner/result",
+      "autolab/physical/validation"
+    ],
+    "mqtt_ui_input_optional_fields": ["asrTiming"],
+    "mqtt_history": "data/mqtt_history/YYYY-MM-DD.jsonl"
+  },
+  "source_data": {
+    "operation_tree": "data/vd10_agent_only_operation_tree.json",
+    "meta_operation_library": "data/meta-operations.json",
+    "meta_operation_schema": "schemas/meta-operation-library.schema.json",
+    "spatial_location_library": "data/spatial-locations.json",
+    "spatial_location_schema": "schemas/spatial-location-library.schema.json",
+    "spatial_locations": 5,
+    "transport_links": 1,
+    "building_floors": 3,
+    "atomic_vd10_capabilities": 16,
+    "instrument_groups": 2,
+    "instrument_meta_operations": 7,
+    "robot_meta_operations": 24,
+    "laboratory_meta_operations": 4,
+    "total_meta_operations": 35
+  },
+  "handoff": {
+    "format_status": "prototype_meta_operation_handoff",
+    "required_files": [
+      "data/meta-operations.json",
+      "schemas/meta-operation-library.schema.json",
+      "schemas/semantic-params.schema.json",
+      "schemas/planner-result.schema.json",
+      "schemas/physical-validation.schema.json",
+      "data/spatial-locations.json",
+      "schemas/spatial-location-library.schema.json",
+      "data/vd10_agent_only_operation_tree.json",
+      "docs/META_OPERATION_SPEC.md",
+      "docs/META_OPERATION_HANDOFF.md",
+      "docs/MODULE_INTERFACE_HANDOFF.md"
+    ],
+    "legacy_schema": "schemas/agan_vd10_handoff.schema.json",
+    "legacy_schema_compatible": false,
+    "confidence_included": false,
+    "physical_execution_included": false,
+    "simulation_only": true
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agan_vd10_handoff.schema.json",
+  "title": "Agan VD10 operation intent handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workflow_id",
+    "source_module",
+    "device_context",
+    "initial_machine_state",
+    "steps",
+    "overall_validation",
+    "responsibility_boundary"
+  ],
+  "properties": {
+    "schema_version": { "const": "0.2.0" },
+    "workflow_id": { "type": "string", "minLength": 1 },
+    "source_module": { "const": "agan_operation_intent_visualizer" },
+    "device_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device_hint", "manual_version"],
+      "properties": {
+        "device_hint": { "type": "string", "minLength": 1 },
+        "manual_version": { "type": ["string", "null"] }
+      }
+    },
+    "initial_machine_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_id", "test_running"],
+      "properties": {
+        "page_id": { "type": "string" },
+        "test_running": { "type": "boolean" }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "overall_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "expected_final_page", "issue_count"],
+      "properties": {
+        "status": { "enum": ["pass", "blocked", "empty"] },
+        "expected_final_page": { "type": "string" },
+        "issue_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "responsibility_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agan_outputs", "downstream_confirms"],
+      "properties": {
+        "agan_outputs": { "type": "array", "items": { "type": "string" } },
+        "downstream_confirms": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "operation_intent",
+        "evidence",
+        "candidate_capability",
+        "params",
+        "plan_validation",
+        "downstream_handoff"
+      ],
+      "properties": {
+        "order": { "type": "integer", "minimum": 1 },
+        "operation_intent": { "type": "string", "minLength": 1 },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_type", "source_text", "matched_rules"],
+          "properties": {
+            "source_type": { "type": "string" },
+            "source_text": { "type": "string" },
+            "matched_rules": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "candidate_capability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["capability_id", "entry_page", "execution_policy", "risk_level", "machine_preconditions"],
+          "properties": {
+            "capability_id": { "type": "string", "minLength": 1 },
+            "entry_page": { "type": "string" },
+            "execution_policy": { "type": "string" },
+            "risk_level": { "type": "string" },
+            "machine_preconditions": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "params": { "type": "object" },
+        "plan_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "page_before", "expected_page_after", "issues"],
+          "properties": {
+            "status": { "enum": ["pass", "blocked"] },
+            "page_before": { "type": "string" },
+            "expected_page_after": { "type": "string" },
+            "issues": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "message", "severity"],
+                "properties": {
+                  "code": { "type": "string" },
+                  "message": { "type": "string" },
+                  "severity": { "enum": ["error", "warning"] }
+                }
+              }
+            }
+          }
+        },
+        "downstream_handoff": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["physical_action_selected", "execution_requested", "final_reachability_to_be_confirmed_downstream"],
+          "properties": {
+            "physical_action_selected": { "const": false },
+            "execution_requested": { "const": false },
+            "final_reachability_to_be_confirmed_downstream": { "const": true }
+          }
+        }
+      }
+    }
+  }
+}

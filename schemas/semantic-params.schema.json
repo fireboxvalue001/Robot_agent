@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autolab.local/schemas/semantic-params.schema.json",
+  "title": "AutoLab intent preprocessing result",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["msgId", "type", "author", "workflowId", "index", "status", "history", "originalText", "parameters", "timestamp"],
+  "properties": {
+    "msgId": { "type": "string", "pattern": "^msg_" },
+    "type": { "const": "semantic_params" },
+    "author": { "type": "string", "minLength": 1 },
+    "workflowId": { "type": "string", "pattern": "^wf_" },
+    "index": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["processing", "success", "failed"] },
+    "history": { "type": "array" },
+    "originalText": { "type": "string" },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/parameter" }
+    },
+    "experimentType": { "type": "string" },
+    "clarification": { "$ref": "#/$defs/clarification" },
+    "timestamp": { "type": "number", "minimum": 0 }
+  },
+  "$defs": {
+    "parameter": {
+      "oneOf": [
+        { "type": "object", "required": ["type", "value"], "properties": { "type": { "const": "number" }, "value": { "type": "number" }, "unit": { "type": "string" } } },
+        { "type": "object", "required": ["type", "value"], "properties": { "type": { "const": "string" }, "value": { "type": "string" } } }
+      ]
+    },
+    "clarification": {
+      "type": "object",
+      "required": ["needed", "missingFields", "questions"],
+      "properties": {
+        "needed": { "type": "boolean" },
+        "missingFields": { "type": "array", "items": { "type": "string" } },
+        "conflictingFields": { "type": "array", "items": { "type": "string" } },
+        "questions": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,735 @@
+{
+  "schema_version": "0.1.0",
+  "device": {
+    "id": "vd10",
+    "name": "VD10",
+    "type": "automatic_visual_distillation_analyzer",
+    "manual": {
+      "file": "VD10_操作 & 维护手册_CN_V2_1.pdf",
+      "version": "2.1",
+      "source_pages_used": [
+        18,
+        19,
+        20,
+        30,
+        31,
+        32,
+        34,
+        43,
+        44,
+        46,
+        56
+      ]
+    }
+  },
+  "scope": {
+    "name": "agent_only_operations",
+    "description": "Only includes VD10 tasks that an agent can complete through UI interaction and machine-checkable state. Tasks requiring human verification, passwords, protected service access, calibration judgment, physical sample preparation, hardware replacement, or irreversible data changes are excluded.",
+    "excluded_capability_types": [
+      "start_distillation_test",
+      "stop_running_test",
+      "hardware_power_switch",
+      "calibration_or_verification",
+      "diagnostic_control",
+      "firmware_update",
+      "delete_or_remove_qc_sample",
+      "physical_sample_preparation",
+      "manual_residue_measurement",
+      "password_protected_configuration",
+      "report_export_requiring_external_usb_or_lan_confirmation"
+    ]
+  },
+  "agent_contract": {
+    "standard_intent_format": {
+      "domain": "lab_instrument",
+      "device": "vd10",
+      "action": "capability_id",
+      "params": {}
+    },
+    "skill_result_format": {
+      "success": true,
+      "capability_id": "vd10.menu.enter_test",
+      "stage": "ui_operation",
+      "data": {},
+      "warnings": [],
+      "error": null
+    },
+    "execution_policy_values": {
+      "agent_allowed": "The agent may execute the capability directly after UI page recognition.",
+      "agent_allowed_with_machine_precheck": "The agent may execute only when the required state can be verified by OCR, UI tree, sensor API, or another machine-readable interface.",
+      "interface_only": "The capability itself is not included, but the state interface is reserved for future orchestration."
+    }
+  },
+  "state_interfaces": [
+    {
+      "interface_id": "vd10.state.current_page",
+      "name": "当前页面识别",
+      "purpose": "Confirm whether VD10 is on main menu, test screen, database screen, result detail screen, or quality menu.",
+      "expected_output": {
+        "page_id": "main_menu | test_screen | database_screen | result_detail_screen | quality_menu | unknown",
+        "confidence": "number"
+      }
+    },
+    {
+      "interface_id": "vd10.state.test_runtime",
+      "name": "测试运行状态",
+      "purpose": "Machine-check whether a test appears to be running before navigation or application exit.",
+      "expected_output": {
+        "test_running": "boolean | unknown",
+        "evidence": [
+          "test_timer_running",
+          "START_or_STOP_visible",
+          "progress_bar_state"
+        ]
+      }
+    },
+    {
+      "interface_id": "vd10.state.form_fields",
+      "name": "测试表单状态",
+      "purpose": "Read sample ID, operator, method, group, and preset fields without starting a test.",
+      "expected_output": {
+        "sample_id": "string | null",
+        "operator": "string | null",
+        "method": "string | null",
+        "group": "string | null",
+        "preset": "string | null"
+      }
+    },
+    {
+      "interface_id": "vd10.state.storage_and_network",
+      "name": "外部存储与网络状态占位",
+      "purpose": "Reserved for future USB/LAN export routing. Export actions are not included in this agent-only operation tree.",
+      "expected_output": {
+        "usb_detected": "boolean | unknown",
+        "lan_available": "boolean | unknown",
+        "network_path_accessible": "boolean | unknown"
+      },
+      "policy": "interface_only"
+    }
+  ],
+  "ui_roots": [
+    {
+      "page_id": "main_menu",
+      "name": "主菜单",
+      "recognition_hints": [
+        "TEST",
+        "DATABASE",
+        "QUALITY",
+        "SETTINGS",
+        "EXIT"
+      ],
+      "children": [
+        "vd10.menu.enter_test",
+        "vd10.menu.enter_database",
+        "vd10.menu.enter_quality"
+      ]
+    },
+    {
+      "page_id": "test_screen",
+      "name": "测试界面",
+      "recognition_hints": [
+        "Sample ID",
+        "Operator",
+        "PreSet",
+        "START",
+        "Setting",
+        "Data",
+        "Graph",
+        "Camera",
+        "Back to Main Menu"
+      ],
+      "children": [
+        "vd10.test.fill_sample_id",
+        "vd10.test.select_operator",
+        "vd10.test.switch_view",
+        "vd10.test.read_form_state",
+        "vd10.test.back_to_main_menu"
+      ]
+    },
+    {
+      "page_id": "database_screen",
+      "name": "结果数据库",
+      "recognition_hints": [
+        "Select a search criterion",
+        "25 last results",
+        "Sample ID",
+        "Operator",
+        "Back to menu"
+      ],
+      "children": [
+        "vd10.database.search",
+        "vd10.database.open_result",
+        "vd10.database.back_to_main_menu"
+      ]
+    },
+    {
+      "page_id": "quality_menu",
+      "name": "质量控制菜单",
+      "recognition_hints": [
+        "QUALITY MENU",
+        "Calibration status",
+        "Quality Control samples status",
+        "Back to Main Menu"
+      ],
+      "children": [
+        "vd10.quality.open_status",
+        "vd10.quality.read_status",
+        "vd10.quality.back_to_main_menu"
+      ]
+    }
+  ],
+  "capability_tree": [
+    {
+      "category_id": "main_menu_navigation",
+      "name": "主菜单导航",
+      "capabilities": [
+        {
+          "capability_id": "vd10.menu.enter_test",
+          "name": "进入测试界面",
+          "entry_page": "main_menu",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "tap",
+              "target": "TEST"
+            }
+          ],
+          "success_criteria": [
+            "test_screen_visible",
+            "sample_id_field_visible",
+            "operator_field_visible"
+          ],
+          "failure_cases": [
+            "main_menu_not_visible",
+            "test_screen_not_visible"
+          ]
+        },
+        {
+          "capability_id": "vd10.menu.enter_database",
+          "name": "进入结果数据库",
+          "entry_page": "main_menu",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "tap",
+              "target": "DATABASE"
+            }
+          ],
+          "success_criteria": [
+            "database_screen_visible",
+            "recent_results_list_visible"
+          ],
+          "failure_cases": [
+            "main_menu_not_visible",
+            "database_screen_not_visible"
+          ]
+        },
+        {
+          "capability_id": "vd10.menu.enter_quality",
+          "name": "进入质量状态页面",
+          "entry_page": "main_menu",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "tap",
+              "target": "QUALITY"
+            }
+          ],
+          "success_criteria": [
+            "quality_menu_visible",
+            "calibration_status_visible",
+            "qc_sample_status_visible"
+          ],
+          "failure_cases": [
+            "main_menu_not_visible",
+            "quality_menu_not_visible"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "test_screen_non_running_operations",
+      "name": "测试界面非运行操作",
+      "capabilities": [
+        {
+          "capability_id": "vd10.test.fill_sample_id",
+          "name": "填写样品 ID",
+          "entry_page": "test_screen",
+          "execution_policy": "agent_allowed_with_machine_precheck",
+          "risk_level": "low",
+          "parameters": {
+            "sample_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "machine_preconditions": [
+            "vd10.state.current_page.page_id == test_screen",
+            "vd10.state.test_runtime.test_running == false"
+          ],
+          "steps": [
+            {
+              "type": "tap",
+              "target": "Sample ID field"
+            },
+            {
+              "type": "input_text",
+              "target": "Sample ID field",
+              "value_from": "params.sample_id"
+            }
+          ],
+          "success_criteria": [
+            "sample_id_field_contains_expected_value"
+          ],
+          "failure_cases": [
+            "test_screen_not_visible",
+            "test_running",
+            "sample_id_field_not_found",
+            "keyboard_input_failed"
+          ]
+        },
+        {
+          "capability_id": "vd10.test.select_operator",
+          "name": "选择操作员",
+          "entry_page": "test_screen",
+          "execution_policy": "agent_allowed_with_machine_precheck",
+          "risk_level": "low",
+          "parameters": {
+            "operator_name": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "machine_preconditions": [
+            "vd10.state.current_page.page_id == test_screen",
+            "vd10.state.test_runtime.test_running == false"
+          ],
+          "steps": [
+            {
+              "type": "tap",
+              "target": "Operator dropdown"
+            },
+            {
+              "type": "select",
+              "target": "operator_name",
+              "value_from": "params.operator_name"
+            }
+          ],
+          "success_criteria": [
+            "operator_field_contains_expected_value"
+          ],
+          "failure_cases": [
+            "test_screen_not_visible",
+            "test_running",
+            "operator_field_not_found",
+            "operator_name_not_in_list"
+          ]
+        },
+        {
+          "capability_id": "vd10.test.switch_view",
+          "name": "切换测试界面视图",
+          "entry_page": "test_screen",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "parameters": {
+            "view": {
+              "type": "string",
+              "required": true,
+              "enum": [
+                "Setting",
+                "Data",
+                "Report",
+                "Graph",
+                "Camera"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "type": "tap",
+              "target_from": "params.view"
+            }
+          ],
+          "success_criteria": [
+            "requested_view_visible"
+          ],
+          "failure_cases": [
+            "test_screen_not_visible",
+            "view_button_not_found",
+            "requested_view_not_visible"
+          ]
+        },
+        {
+          "capability_id": "vd10.test.read_form_state",
+          "name": "读取测试表单状态",
+          "entry_page": "test_screen",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "observe",
+              "target": "test_form_fields"
+            }
+          ],
+          "success_criteria": [
+            "form_state_extracted"
+          ],
+          "failure_cases": [
+            "test_screen_not_visible",
+            "form_fields_not_readable"
+          ],
+          "output_interface": "vd10.state.form_fields"
+        },
+        {
+          "capability_id": "vd10.test.back_to_main_menu",
+          "name": "从测试界面返回主菜单",
+          "entry_page": "test_screen",
+          "execution_policy": "agent_allowed_with_machine_precheck",
+          "risk_level": "low",
+          "machine_preconditions": [
+            "vd10.state.test_runtime.test_running == false"
+          ],
+          "steps": [
+            {
+              "type": "tap",
+              "target": "Back to Main Menu"
+            }
+          ],
+          "success_criteria": [
+            "main_menu_visible"
+          ],
+          "failure_cases": [
+            "test_screen_not_visible",
+            "test_running",
+            "main_menu_not_visible"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "result_database_read_operations",
+      "name": "结果数据库读取操作",
+      "capabilities": [
+        {
+          "capability_id": "vd10.database.search",
+          "name": "检索测试结果",
+          "entry_page": "database_screen",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "parameters": {
+            "criterion": {
+              "type": "string",
+              "required": true,
+              "enum": [
+                "last_result",
+                "today",
+                "last_week",
+                "last_month",
+                "date",
+                "date_range",
+                "sample_id",
+                "operator"
+              ]
+            },
+            "value": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "steps": [
+            {
+              "type": "select",
+              "target": "search_criterion",
+              "value_from": "params.criterion"
+            },
+            {
+              "type": "input_or_select",
+              "target": "search_value",
+              "value_from": "params.value"
+            }
+          ],
+          "success_criteria": [
+            "result_list_updated"
+          ],
+          "failure_cases": [
+            "database_screen_not_visible",
+            "search_criterion_not_found",
+            "date_picker_not_visible",
+            "no_result_found"
+          ]
+        },
+        {
+          "capability_id": "vd10.database.open_result",
+          "name": "打开测试结果详情",
+          "entry_page": "database_screen",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "parameters": {
+            "result_selector": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "steps": [
+            {
+              "type": "tap",
+              "target": "result_row",
+              "selector_from": "params.result_selector"
+            }
+          ],
+          "success_criteria": [
+            "result_detail_visible"
+          ],
+          "failure_cases": [
+            "database_screen_not_visible",
+            "result_row_not_found",
+            "result_detail_not_visible"
+          ]
+        },
+        {
+          "capability_id": "vd10.database.switch_result_view",
+          "name": "切换结果详情视图",
+          "entry_page": "result_detail_screen",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "parameters": {
+            "view": {
+              "type": "string",
+              "required": true,
+              "enum": [
+                "Setting",
+                "Data",
+                "Report",
+                "Graph",
+                "Camera"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "type": "tap",
+              "target_from": "params.view"
+            }
+          ],
+          "success_criteria": [
+            "requested_result_view_visible"
+          ],
+          "failure_cases": [
+            "result_detail_screen_not_visible",
+            "view_button_not_found",
+            "requested_view_not_visible"
+          ]
+        },
+        {
+          "capability_id": "vd10.database.back_to_main_menu",
+          "name": "从数据库返回主菜单",
+          "entry_page": "database_screen",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "tap",
+              "target": "Back to menu"
+            }
+          ],
+          "success_criteria": [
+            "main_menu_visible"
+          ],
+          "failure_cases": [
+            "database_screen_not_visible",
+            "main_menu_not_visible"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "quality_status_read_operations",
+      "name": "质量状态读取操作",
+      "capabilities": [
+        {
+          "capability_id": "vd10.quality.open_status",
+          "name": "打开质量状态页面",
+          "entry_page": "main_menu",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "tap",
+              "target": "QUALITY"
+            }
+          ],
+          "success_criteria": [
+            "quality_menu_visible",
+            "calibration_status_visible",
+            "qc_sample_status_visible"
+          ],
+          "failure_cases": [
+            "main_menu_not_visible",
+            "quality_menu_not_visible"
+          ]
+        },
+        {
+          "capability_id": "vd10.quality.read_status",
+          "name": "读取质量状态",
+          "entry_page": "quality_menu",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "observe",
+              "target": "calibration_status_and_qc_sample_status"
+            }
+          ],
+          "success_criteria": [
+            "calibration_status_extracted",
+            "qc_sample_status_extracted"
+          ],
+          "failure_cases": [
+            "quality_menu_not_visible",
+            "status_not_readable"
+          ]
+        },
+        {
+          "capability_id": "vd10.quality.back_to_main_menu",
+          "name": "从质量状态页面返回主菜单",
+          "entry_page": "quality_menu",
+          "execution_policy": "agent_allowed",
+          "risk_level": "low",
+          "steps": [
+            {
+              "type": "tap",
+              "target": "Back to Main Menu"
+            }
+          ],
+          "success_criteria": [
+            "main_menu_visible"
+          ],
+          "failure_cases": [
+            "quality_menu_not_visible",
+            "main_menu_not_visible"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "safe_application_exit",
+      "name": "安全退出应用",
+      "capabilities": [
+        {
+          "capability_id": "vd10.app.exit",
+          "name": "退出 VD10 应用程序",
+          "entry_page": "main_menu",
+          "execution_policy": "agent_allowed_with_machine_precheck",
+          "risk_level": "medium",
+          "machine_preconditions": [
+            "vd10.state.current_page.page_id == main_menu",
+            "vd10.state.test_runtime.test_running == false"
+          ],
+          "steps": [
+            {
+              "type": "tap",
+              "target": "EXIT"
+            },
+            {
+              "type": "confirm",
+              "target": "exit_confirmation"
+            },
+            {
+              "type": "wait",
+              "target": "screen",
+              "expect": "screen_blank"
+            }
+          ],
+          "success_criteria": [
+            "vd10_application_exited",
+            "screen_blank"
+          ],
+          "failure_cases": [
+            "main_menu_not_visible",
+            "test_running",
+            "confirmation_not_visible",
+            "screen_not_blank_after_exit"
+          ]
+        }
+      ]
+    }
+  ],
+  "reserved_interfaces_for_excluded_work": [
+    {
+      "capability_family": "vd10.test.start",
+      "reason_excluded": "Starting a distillation test requires physical sample preparation and hardware condition checks that should be verified by a human or trusted sensor subsystem.",
+      "reserved_precheck_interface": {
+        "sample_id_present": "boolean",
+        "operator_present": "boolean",
+        "method_or_preset_selected": "boolean",
+        "flask_installed_correctly": "boolean | unknown",
+        "flask_size_matches_method": "boolean | unknown",
+        "support_plate_matches_method": "boolean | unknown",
+        "receiver_door_closed": "boolean | unknown",
+        "cooling_liquid_level_ok": "boolean | unknown",
+        "setup_progress_state_green": "boolean | unknown"
+      }
+    },
+    {
+      "capability_family": "vd10.report.export",
+      "reason_excluded": "Report export depends on USB/LAN external availability and file transfer confirmation.",
+      "reserved_precheck_interface": "vd10.state.storage_and_network"
+    },
+    {
+      "capability_family": "vd10.calibration",
+      "reason_excluded": "Calibration changes instrument measurement state and requires reference instruments or certified values.",
+      "reserved_authorization_interface": {
+        "authorized_operator_present": "boolean",
+        "password_available": "boolean",
+        "reference_value_available": "boolean"
+      }
+    }
+  ],
+  "error_taxonomy": [
+    {
+      "code": "PAGE_NOT_RECOGNIZED",
+      "stage": "page_recognition",
+      "meaning": "The agent cannot reliably identify the current VD10 page.",
+      "agent_action": "stop_and_request_visual_recovery"
+    },
+    {
+      "code": "CAPABILITY_NOT_IN_AGENT_ONLY_SCOPE",
+      "stage": "capability_policy",
+      "meaning": "The requested task requires human verification or restricted access and is not included in this agent-only tree.",
+      "agent_action": "reject_without_execution"
+    },
+    {
+      "code": "MACHINE_PRECHECK_UNKNOWN",
+      "stage": "machine_precheck",
+      "meaning": "A required machine-readable precheck returned unknown.",
+      "agent_action": "stop_and_request_external_state_interface"
+    },
+    {
+      "code": "TEST_RUNNING",
+      "stage": "safe_navigation",
+      "meaning": "The test appears to be running, so form editing or application exit is blocked.",
+      "agent_action": "reject_without_execution"
+    },
+    {
+      "code": "FIELD_NOT_FOUND",
+      "stage": "ui_operation",
+      "meaning": "Required input field or dropdown was not found.",
+      "agent_action": "retry_observation_then_fail"
+    },
+    {
+      "code": "TARGET_NOT_FOUND",
+      "stage": "ui_operation",
+      "meaning": "Required button, tab, row, or menu target was not found.",
+      "agent_action": "retry_observation_then_fail"
+    },
+    {
+      "code": "VALUE_NOT_IN_LIST",
+      "stage": "ui_operation",
+      "meaning": "The requested operator, view, result row, or dropdown value is not available.",
+      "agent_action": "return_not_found"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VD10 实验任务编排台 v0.3.0</title>
+  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="meta-operation.css?v=5">
+</head>
+<body>
+  <header class="topbar"><div><p class="eyebrow">VD10 · 实验室智能操控模拟</p><h1>实验任务编排台</h1></div><div class="top-status"><span class="dot"></span>模拟模式 <span class="version">v0.3.0</span></div></header>
+  <main>
+    <section class="intent-panel panel-accent-red">
+      <div class="section-title"><div><span class="stage-mark red">1</span><div><h2>总体意图输入与预处理</h2></div></div><span class="stage-state" id="intent-state">等待输入</span></div>
+      <div class="intent-row">
+        <div class="intent-input-wrap"><label for="intent-input">描述实验目标或操作意图</label><textarea id="intent-input" rows="2">将桌上的样品分成4份，每份25ml，分别送到四个仪器中进行检测</textarea></div>
+        <div class="intent-actions">
+          <div class="voice-actions"><button class="button voice" id="voice-start" type="button">开始语音输入</button><button class="button stop-voice" id="voice-stop" type="button" hidden>停止录音</button></div>
+          <button class="button mqtt" id="mqtt-send" type="button" disabled>发送语义处理</button>
+          <button class="button history" id="mqtt-history-load" type="button">查看通信历史</button>
+          <button class="button primary" id="parse-intent" type="button">生成实验流程</button>
+          <span id="voice-status" class="voice-status">正在检查语音服务...</span>
+          <span id="mqtt-status" class="mqtt-status">正在检查MQTT服务...</span>
+        </div>
+      </div>
+      <div class="intent-bottom"><div><span class="mini-label">预处理结果</span><div id="intent-summary" class="chips"><span class="chip muted">尚未生成任务分解</span></div></div><div class="input-sources"><span class="mini-label">输入来源</span><span class="source active">语言</span><span class="source">视觉</span><span class="source">动作</span><span class="source">眼神</span></div></div>
+      <details id="mqtt-result" class="mqtt-result" hidden><summary>MQTT消息与语义处理结果</summary><pre id="mqtt-result-json"></pre></details>
+      <details id="mqtt-history-result" class="mqtt-result mqtt-history-result" hidden><summary>MQTT语义处理历史</summary><div id="mqtt-history-json" class="mqtt-history-list"></div></details>
+    </section>
+    <section class="workspace">
+      <aside class="panel library-panel panel-accent-blue"><div class="section-title"><div><span class="stage-mark blue">2</span><div><h2>元操作能力库</h2></div></div><span class="count" id="operation-count">0 项</span></div><p class="helper">从能力库拖拽元操作，或点击“+”加入任务流程。说明书内部操作树在元操作详情中查看。</p><input id="library-search" class="search" type="search" placeholder="搜索元操作"><details class="spatial-location-panel"><summary>空间位置 <span id="spatial-location-count">0 项</span></summary><div id="spatial-location-list" class="spatial-location-list"></div></details><div id="operation-library" class="operation-library"></div></aside>
+      <section class="panel flow-panel panel-accent-purple"><div class="section-title"><div><span class="stage-mark purple">3</span><div><h2>任务流程编排</h2></div></div><button class="text-button" id="clear-flow">清空流程</button></div><div class="flow-stage semantic-stage"><div class="flow-heading"><div><span class="stage-pill purple-pill">阶段一</span><strong>意图到元操作</strong><small>检查任务目标与元操作的输入输出是否衔接</small></div><span id="semantic-state" class="check-state">待生成</span></div><ol id="semantic-flow" class="flow-list"></ol></div><div class="flow-divider">↓ 进入物理可执行确认</div><div class="flow-stage physical-stage"><div class="flow-heading"><div><span class="stage-pill orange-pill">阶段二</span><strong>物理可执行确认</strong><small>检查位置、设备、资源和时序条件</small></div><span id="physical-state" class="check-state">待校验</span></div><ol id="physical-flow" class="flow-list"></ol></div></section>
+      <aside class="panel result-panel panel-accent-blue"><div class="section-title"><div><span class="stage-mark blue">4</span><div><h2>执行状态与实验结果</h2></div></div><button class="button compact" id="simulate-execution">模拟执行</button></div><div class="tabs"><button class="tab active" data-tab="status">执行状态与记录</button><button class="tab" data-tab="results">结构化实验结果</button></div><div id="tab-status" class="tab-content"></div><div id="tab-results" class="tab-content" hidden></div></aside>
+    </section>
+  </main><div id="toast" class="toast"></div><script src="voice-input.js?v=3"></script><script src="mqtt-input.js?v=5"></script><script src="app.js?v=19"></script>
+</body></html>

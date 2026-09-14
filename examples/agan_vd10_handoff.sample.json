@@ -1,0 +1,96 @@
+{
+  "schema_version": "0.2.0",
+  "workflow_id": "workflow-sample-vd10-001",
+  "source_module": "agan_operation_intent_visualizer",
+  "device_context": {
+    "device_hint": "vd10",
+    "manual_version": "2.1"
+  },
+  "initial_machine_state": {
+    "page_id": "main_menu",
+    "test_running": false
+  },
+  "steps": [
+    {
+      "order": 1,
+      "operation_intent": "进入测试界面",
+      "evidence": {
+        "source_type": "natural_language",
+        "source_text": "进入测试界面，把样品 ID 填成 SP98-001",
+        "matched_rules": ["命中进入测试界面"]
+      },
+      "candidate_capability": {
+        "capability_id": "vd10.menu.enter_test",
+        "entry_page": "main_menu",
+        "execution_policy": "agent_allowed",
+        "risk_level": "low",
+        "machine_preconditions": []
+      },
+      "params": {},
+      "plan_validation": {
+        "status": "pass",
+        "page_before": "main_menu",
+        "expected_page_after": "test_screen",
+        "issues": []
+      },
+      "downstream_handoff": {
+        "physical_action_selected": false,
+        "execution_requested": false,
+        "final_reachability_to_be_confirmed_downstream": true
+      }
+    },
+    {
+      "order": 2,
+      "operation_intent": "填写样品 ID",
+      "evidence": {
+        "source_type": "natural_language",
+        "source_text": "进入测试界面，把样品 ID 填成 SP98-001",
+        "matched_rules": ["命中样品 ID 字段", "提取参数 SP98-001"]
+      },
+      "candidate_capability": {
+        "capability_id": "vd10.test.fill_sample_id",
+        "entry_page": "test_screen",
+        "execution_policy": "agent_allowed_with_machine_precheck",
+        "risk_level": "low",
+        "machine_preconditions": [
+          "vd10.state.current_page.page_id == test_screen",
+          "vd10.state.test_runtime.test_running == false"
+        ]
+      },
+      "params": {
+        "sample_id": "SP98-001"
+      },
+      "plan_validation": {
+        "status": "pass",
+        "page_before": "test_screen",
+        "expected_page_after": "test_screen",
+        "issues": []
+      },
+      "downstream_handoff": {
+        "physical_action_selected": false,
+        "execution_requested": false,
+        "final_reachability_to_be_confirmed_downstream": true
+      }
+    }
+  ],
+  "overall_validation": {
+    "status": "pass",
+    "expected_final_page": "test_screen",
+    "issue_count": 0
+  },
+  "responsibility_boundary": {
+    "agan_outputs": [
+      "operation_intent",
+      "semantic_step_order",
+      "evidence",
+      "candidate_capability",
+      "known_policy_constraints"
+    ],
+    "downstream_confirms": [
+      "final_physical_action",
+      "ui_target_localization",
+      "machine_state_reachability",
+      "execution_and_result"
+    ]
+  }
+}

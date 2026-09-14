@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autolab.local/schemas/physical-validation.schema.json",
+  "title": "AutoLab physical executability validation",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["msgId", "type", "author", "workflowId", "index", "status", "history", "planId", "result", "stepResults", "timestamp"],
+  "properties": {
+    "msgId": { "type": "string", "pattern": "^msg_" },
+    "type": { "const": "physical_validation" },
+    "author": { "type": "string", "minLength": 1 },
+    "workflowId": { "type": "string", "pattern": "^wf_" },
+    "index": { "type": "integer", "minimum": 3 },
+    "status": { "enum": ["processing", "success", "failed"] },
+    "history": { "type": "array" },
+    "planId": { "type": "string", "pattern": "^plan_" },
+    "result": { "enum": ["executable", "blocked", "requires_confirmation"] },
+    "stepResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stepId", "executable", "checks", "blockers"],
+        "properties": {
+          "stepId": { "type": "string" },
+          "executable": { "type": "boolean" },
+          "checks": { "type": "array", "items": { "type": "string" } },
+          "blockers": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "timestamp": { "type": "number", "minimum": 0 }
+  }
+}

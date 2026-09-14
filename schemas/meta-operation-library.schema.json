@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autolab.local/schemas/meta-operation-library.schema.json",
+  "title": "AutoLab Meta Operation Library",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "library_id", "categories", "instruments", "preconditions", "meta_operations"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "library_id": { "type": "string", "minLength": 1 },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "categories": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/category" }
+    },
+    "instruments": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/instrument" }
+    },
+    "preconditions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/precondition" }
+    },
+    "meta_operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/metaOperation" }
+    }
+  },
+  "$defs": {
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "color"],
+      "properties": {
+        "id": { "enum": ["instrument", "robot", "lab"] },
+        "name": { "type": "string", "minLength": 1 },
+        "color": { "enum": ["green", "blue", "red"] },
+        "description": { "type": "string" }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "status": { "enum": ["draft", "pending_verification", "verified", "interface_only", "disabled"] }
+      }
+    },
+    "precondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "required"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "description": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "check_interface": { "type": ["string", "null"] }
+      }
+    },
+    "ioSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "properties"],
+      "properties": {
+        "type": { "const": "object" },
+        "required": { "type": "array", "items": { "type": "string" } },
+        "properties": { "type": "object" }
+      }
+    },
+    "operationNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance_id", "type", "node_ref", "name", "source_type"],
+      "properties": {
+        "instance_id": { "type": "string", "minLength": 1 },
+        "type": { "const": "atomic_node" },
+        "node_ref": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "source_type": { "enum": ["electronic_manual", "robot_teaching", "software_interface", "reserved_interface"] },
+        "execution_policy": { "enum": ["agent_allowed", "agent_allowed_with_machine_precheck", "requires_physical_confirmation", "interface_only"] },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "parameter_bindings": { "type": "object" },
+        "result_bindings": { "type": "object" }
+      }
+    },
+    "metaOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "version", "name", "category", "description", "status",
+        "execution_policy", "source", "inputs", "outputs", "operation_tree",
+        "physical_requirements", "capability_boundary", "failure_policy"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "category": { "enum": ["instrument", "robot", "lab"] },
+        "instrument_id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "description": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["draft", "pending_verification", "verified", "interface_only", "disabled"] },
+        "execution_policy": { "enum": ["agent_allowed", "agent_allowed_with_machine_precheck", "requires_physical_confirmation", "requires_environment_confirmation", "interface_only"] },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "reference"],
+          "properties": {
+            "type": { "enum": ["electronic_manual", "robot_operation_document", "robot_teaching", "software_interface", "system_requirement"] },
+            "reference": { "type": "string", "minLength": 1 },
+            "sections": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "inputs": { "$ref": "#/$defs/ioSchema" },
+        "outputs": { "$ref": "#/$defs/ioSchema" },
+        "input_hint": { "type": "string" },
+        "output_hint": { "type": "string" },
+        "precondition_refs": { "type": "array", "items": { "type": "string" } },
+        "operation_tree": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "children"],
+          "properties": {
+            "type": { "enum": ["sequence", "parallel"] },
+            "children": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/operationNode" } }
+          }
+        },
+        "physical_requirements": { "type": "array", "items": { "type": "string" } },
+        "capability_boundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowed", "forbidden"],
+          "properties": {
+            "allowed": { "type": "array", "items": { "type": "string" } },
+            "forbidden": { "type": "array", "items": { "type": "string" } },
+            "requires_confirmation": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "failure_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default_action", "max_retries"],
+          "properties": {
+            "default_action": { "enum": ["stop", "retry_then_stop", "request_confirmation"] },
+            "max_retries": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "retryable_errors": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "extensions": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "category": { "const": "instrument" } }, "required": ["category"] },
+          "then": { "required": ["instrument_id"] }
+        }
+      ]
+    }
+  }
+}

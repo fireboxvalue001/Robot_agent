@@ -1,0 +1,76 @@
+{
+  "msgId": "msg_11111111-1111-4111-8111-111111111111",
+  "type": "planner_result",
+  "author": "planner",
+  "workflowId": "wf_22222222-2222-4222-8222-222222222222",
+  "index": 2,
+  "status": "success",
+  "history": [],
+  "experimentName": "VD10样品检测",
+  "steps": [
+    { "step": 1, "action": "样品定量分装" },
+    { "step": 2, "action": "实验室跨区域转运" },
+    { "step": 3, "action": "VD10样品检测" },
+    { "step": 4, "action": "读取VD10检测结果" }
+  ],
+  "parameters": {
+    "sample_count": { "value": 4, "unit": "份" },
+    "sample_volume": { "value": 25, "unit": "mL" }
+  },
+  "operationChain": {
+    "contractVersion": "1.0.0",
+    "planId": "plan_33333333-3333-4333-8333-333333333333",
+    "capabilityLibrary": {
+      "id": "autolab.vd10.meta_operations",
+      "version": "1.3.0",
+      "checksum": "sha256:551112f280243e231348d71b5934756541c4c584393e1437983a08f21eaaba15"
+    },
+    "operations": [
+      {
+        "stepId": "step_001",
+        "sequence": 1,
+        "metaOperationId": "robot.meta.aliquot_sample",
+        "metaOperationVersion": "1.0.0",
+        "arguments": { "target_count": 4, "volume_each": "25mL" },
+        "dependsOn": []
+      },
+      {
+        "stepId": "step_002",
+        "sequence": 2,
+        "metaOperationId": "lab.meta.cross_zone_transport",
+        "metaOperationVersion": "1.0.0",
+        "arguments": {
+          "source_location_id": "lab.location.sample_checkin_station",
+          "target_location_id": "lab.location.vd10_station"
+        },
+        "dependsOn": ["step_001"]
+      },
+      {
+        "stepId": "step_003",
+        "sequence": 3,
+        "metaOperationId": "vd10.meta.sample_test",
+        "metaOperationVersion": "1.0.0",
+        "arguments": { "sample_volume": 25, "target_device": "vd10" },
+        "dependsOn": ["step_002"]
+      },
+      {
+        "stepId": "step_004",
+        "sequence": 4,
+        "metaOperationId": "vd10.meta.query_test_results",
+        "metaOperationVersion": "1.0.0",
+        "arguments": { "sample_id": "sample_pending_identification" },
+        "dependsOn": ["step_003"]
+      },
+      {
+        "stepId": "step_005",
+        "sequence": 5,
+        "metaOperationId": "robot.meta.read_result_from_screen",
+        "metaOperationVersion": "1.0.0",
+        "arguments": { "device_id": "vd10" },
+        "dependsOn": ["step_004"]
+      }
+    ]
+  },
+  "warnings": ["VD10真实检测接口仍需实机确认"],
+  "timestamp": 1789196378000
+}

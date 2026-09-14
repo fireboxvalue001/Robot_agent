@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autolab.local/schemas/planner-result.schema.json",
+  "title": "AutoLab planner result with operation chain",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["msgId", "type", "author", "workflowId", "index", "status", "history", "experimentName", "steps", "parameters", "timestamp"],
+  "properties": {
+    "msgId": { "type": "string", "pattern": "^msg_" },
+    "type": { "const": "planner_result" },
+    "author": { "type": "string", "minLength": 1 },
+    "workflowId": { "type": "string", "pattern": "^wf_" },
+    "index": { "type": "integer", "minimum": 2 },
+    "status": { "enum": ["processing", "success", "failed"] },
+    "history": { "type": "array" },
+    "experimentName": { "type": "string" },
+    "steps": { "type": "array", "items": { "type": "object", "required": ["step", "action"], "properties": { "step": { "type": "integer", "minimum": 1 }, "action": { "type": "string" }, "duration": { "type": "number", "minimum": 0 } } } },
+    "parameters": { "type": "object" },
+    "operationChain": { "$ref": "#/$defs/operationChain" },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "timestamp": { "type": "number", "minimum": 0 }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "const": "success" } } }, "then": { "required": ["operationChain"] } }
+  ],
+  "$defs": {
+    "operationChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "planId", "capabilityLibrary", "operations"],
+      "properties": {
+        "contractVersion": { "const": "1.0.0" },
+        "planId": { "type": "string", "pattern": "^plan_" },
+        "capabilityLibrary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version", "checksum"],
+          "properties": {
+            "id": { "type": "string" },
+            "version": { "type": "string" },
+            "checksum": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+          }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["stepId", "sequence", "metaOperationId", "metaOperationVersion", "arguments", "dependsOn"],
+            "properties": {
+              "stepId": { "type": "string", "minLength": 1 },
+              "sequence": { "type": "integer", "minimum": 1 },
+              "metaOperationId": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+              "metaOperationVersion": { "type": "string" },
+              "arguments": { "type": "object" },
+              "dependsOn": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

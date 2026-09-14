@@ -1,0 +1,575 @@
+{
+  "schema_version": "1.3.0",
+  "library_id": "autolab.vd10.meta_operations",
+  "updated_at": "2026-09-14T12:00:00+08:00",
+  "categories": [
+    { "id": "instrument", "name": "检测仪器元操作", "color": "green", "description": "由具体检测仪器执行的测试、控制和安全退出能力，按仪器分组管理。" },
+    { "id": "robot", "name": "机器人元操作", "color": "blue", "description": "机器人完成的样品预处理、上下料、界面操作和结果信息读取能力。" },
+    { "id": "lab", "name": "实验室环境元操作", "color": "red", "description": "样品在工位、区域和楼层之间的空间转运，以及门禁和通道能力。" }
+  ],
+  "instruments": [
+    { "id": "vd10", "name": "VD10自动蒸馏测定仪", "description": "VD10专属测试与设备控制元操作。", "status": "pending_verification" },
+    { "id": "generic", "name": "通用/待绑定检测仪器", "description": "尚未绑定具体型号的通用检测接口。", "status": "interface_only" }
+  ],
+  "preconditions": [
+    { "id": "sample.tube.qr_attached", "description": "待处理试管已经贴装可识别的二维码。", "required": true, "check_interface": "vision.qr_presence" },
+    { "id": "vd10.not_running", "description": "VD10当前没有正在运行的测试。", "required": true, "check_interface": "vd10.state.test_runtime" },
+    { "id": "route.available", "description": "机械臂或AGV目标路径可通行。", "required": true, "check_interface": "lab.route_state" },
+    { "id": "spatial.locations.verified", "description": "任务引用的空间位置已经完成现场标定，不是占位坐标。", "required": true, "check_interface": "spatial.location_registry" },
+    { "id": "instrument.basic_operation.ready", "description": "基础实验仪器、容器和安全互锁状态已经确认。", "required": true, "check_interface": "instrument.basic_state" },
+    { "id": "sample.identity.available", "description": "样品编号、来源和容器身份能够被唯一核验。", "required": true, "check_interface": "sample.registry.lookup" },
+    { "id": "sample.container.compatible", "description": "样品容器与目标预处理或检测方法兼容。", "required": true, "check_interface": "sample.container.compatibility" },
+    { "id": "test.method.registered", "description": "检测项目、标准方法和目标设备已经登记。", "required": true, "check_interface": "test.method_registry" }
+  ],
+  "meta_operations": [
+    {
+      "id": "vd10.meta.prepare_test", "version": "1.0.0", "name": "VD10测试信息准备", "category": "instrument", "instrument_id": "vd10",
+      "description": "进入测试界面，填写样品信息并读取表单确认。", "status": "pending_verification", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "electronic_manual", "reference": "VD10_操作 & 维护手册_CN_V2_1.pdf", "sections": ["测试界面非运行操作"] },
+      "inputs": { "type": "object", "required": ["sample_id"], "properties": { "sample_id": { "type": "string" }, "operator": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["form_state"], "properties": { "form_state": { "type": "object" }, "verified": { "type": "boolean" } } },
+      "input_hint": "样品编号、操作员", "output_hint": "已核验的VD10测试表单状态", "precondition_refs": ["vd10.not_running"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "prepare_01", "type": "atomic_node", "node_ref": "vd10.menu.enter_test", "name": "进入测试界面", "source_type": "electronic_manual", "execution_policy": "agent_allowed" },
+        { "instance_id": "prepare_02", "type": "atomic_node", "node_ref": "vd10.test.fill_sample_id", "name": "填写样品ID", "source_type": "electronic_manual", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["prepare_01"] },
+        { "instance_id": "prepare_03", "type": "atomic_node", "node_ref": "vd10.test.select_operator", "name": "选择操作员", "source_type": "electronic_manual", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["prepare_01"] },
+        { "instance_id": "prepare_04", "type": "atomic_node", "node_ref": "vd10.test.read_form_state", "name": "读取并核验表单", "source_type": "electronic_manual", "execution_policy": "agent_allowed", "depends_on": ["prepare_02", "prepare_03"] }
+      ] },
+      "physical_requirements": [], "capability_boundary": { "allowed": ["填写和读取测试前信息"], "forbidden": ["启动真实测试"], "requires_confirmation": [] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["PAGE_NOT_RECOGNIZED", "FIELD_NOT_FOUND"] }
+    },
+    {
+      "id": "vd10.meta.sample_test", "version": "1.0.0", "name": "VD10样品检测", "category": "instrument", "instrument_id": "vd10",
+      "description": "在外部完成样品和硬件安全确认后，执行一次VD10检测任务。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "electronic_manual", "reference": "VD10_操作 & 维护手册_CN_V2_1.pdf", "sections": ["测试流程"] },
+      "inputs": { "type": "object", "required": ["sample_id"], "properties": { "sample_id": { "type": "string" }, "sample_volume": { "type": "number", "unit": "ml" } } },
+      "outputs": { "type": "object", "required": ["test_status"], "properties": { "test_status": { "type": "string" }, "measurement": { "type": ["object", "null"] } } },
+      "input_hint": "已完成物理装载和安全确认的样品", "output_hint": "VD10检测状态与结构化结果", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "test_01", "type": "atomic_node", "node_ref": "vd10.test.start", "name": "开始蒸馏测试", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "test_02", "type": "atomic_node", "node_ref": "vd10.test.monitor", "name": "监测测试状态", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["test_01"] },
+        { "instance_id": "test_03", "type": "atomic_node", "node_ref": "vd10.test.collect_result", "name": "收集检测结果", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["test_02"] }
+      ] },
+      "physical_requirements": ["确认烧瓶、支撑板、接收室和冷却液状态", "确认样品已经正确装载"],
+      "capability_boundary": { "allowed": ["保留检测执行接口"], "forbidden": ["未确认物理条件时启动测试"], "requires_confirmation": ["首次执行和任何硬件状态未知时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "vd10.meta.query_test_results", "version": "1.0.0", "name": "VD10检测结果查询", "category": "instrument", "instrument_id": "vd10",
+      "description": "在VD10结果数据库中检索并打开指定检测结果页面，供后续机器人读取。", "status": "pending_verification", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "electronic_manual", "reference": "VD10_操作 & 维护手册_CN_V2_1.pdf", "sections": ["结果数据库"] },
+      "inputs": { "type": "object", "required": [], "properties": { "sample_id": { "type": "string" }, "date_range": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["result_view_state"], "properties": { "result_view_state": { "type": "object" } } },
+      "input_hint": "样品编号、日期或操作员等检索条件", "output_hint": "已打开的VD10检测结果页面状态", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "query_01", "type": "atomic_node", "node_ref": "vd10.menu.enter_database", "name": "进入结果数据库", "source_type": "electronic_manual", "execution_policy": "agent_allowed" },
+        { "instance_id": "query_02", "type": "atomic_node", "node_ref": "vd10.database.search", "name": "检索测试结果", "source_type": "electronic_manual", "execution_policy": "agent_allowed", "depends_on": ["query_01"] },
+        { "instance_id": "query_03", "type": "atomic_node", "node_ref": "vd10.database.open_result", "name": "打开结果详情", "source_type": "electronic_manual", "execution_policy": "agent_allowed", "depends_on": ["query_02"] },
+        { "instance_id": "query_04", "type": "atomic_node", "node_ref": "vd10.database.switch_result_view", "name": "切换结果详情视图", "source_type": "electronic_manual", "execution_policy": "agent_allowed", "depends_on": ["query_03"] }
+      ] },
+      "physical_requirements": [], "capability_boundary": { "allowed": ["检索并打开结果页面"], "forbidden": ["删除或修改结果", "把未读取的页面状态当作结构化结果"], "requires_confirmation": [] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["TARGET_NOT_FOUND"] }
+    },
+    {
+      "id": "vd10.meta.inspect_quality_status", "version": "1.0.0", "name": "VD10质量状态检查", "category": "instrument", "instrument_id": "vd10",
+      "description": "打开VD10质量控制页面并呈现校准状态和QC样品状态。", "status": "pending_verification", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "electronic_manual", "reference": "VD10_操作 & 维护手册_CN_V2_1.pdf", "sections": ["质量控制菜单"] },
+      "inputs": { "type": "object", "required": [], "properties": {} }, "outputs": { "type": "object", "required": ["quality_status"], "properties": { "quality_status": { "type": "object" } } },
+      "input_hint": "VD10设备", "output_hint": "校准与QC状态", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "quality_01", "type": "atomic_node", "node_ref": "vd10.menu.enter_quality", "name": "进入质量菜单", "source_type": "electronic_manual", "execution_policy": "agent_allowed" },
+        { "instance_id": "quality_02", "type": "atomic_node", "node_ref": "vd10.quality.open_status", "name": "打开质量状态", "source_type": "electronic_manual", "execution_policy": "agent_allowed", "depends_on": ["quality_01"] },
+        { "instance_id": "quality_03", "type": "atomic_node", "node_ref": "vd10.quality.read_status", "name": "读取质量状态", "source_type": "electronic_manual", "execution_policy": "agent_allowed", "depends_on": ["quality_02"] }
+      ] },
+      "physical_requirements": [], "capability_boundary": { "allowed": ["读取质量状态"], "forbidden": ["执行校准", "增删QC样品"], "requires_confirmation": [] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["PAGE_NOT_RECOGNIZED"] }
+    },
+    {
+      "id": "vd10.meta.safe_exit", "version": "1.0.0", "name": "VD10安全退出", "category": "instrument", "instrument_id": "vd10",
+      "description": "确认测试未运行后安全退出VD10应用。", "status": "pending_verification", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "electronic_manual", "reference": "VD10_操作 & 维护手册_CN_V2_1.pdf", "sections": ["退出应用"] },
+      "inputs": { "type": "object", "required": ["test_running"], "properties": { "test_running": { "type": "boolean" } } },
+      "outputs": { "type": "object", "required": ["application_closed"], "properties": { "application_closed": { "type": "boolean" } } },
+      "input_hint": "可机器确认的测试运行状态", "output_hint": "应用退出状态", "precondition_refs": ["vd10.not_running"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "exit_01", "type": "atomic_node", "node_ref": "vd10.app.exit", "name": "退出VD10应用", "source_type": "electronic_manual", "execution_policy": "agent_allowed_with_machine_precheck" }
+      ] },
+      "physical_requirements": [], "capability_boundary": { "allowed": ["退出应用程序"], "forbidden": ["关闭主电源", "测试运行时退出"], "requires_confirmation": ["运行状态无法识别时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.operate_industrial_pc", "version": "1.0.0", "name": "仪器工控机界面操作", "category": "robot",
+      "description": "通过鼠标和键盘控制仪器工控机界面。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器控制阶段"] },
+      "inputs": { "type": "object", "required": ["ui_action"], "properties": { "ui_action": { "type": "object" } } },
+      "outputs": { "type": "object", "required": ["ui_state"], "properties": { "ui_state": { "type": "object" } } },
+      "input_hint": "已标定的界面目标和输入内容", "output_hint": "操作后的工控机界面状态", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "pc_01", "type": "atomic_node", "node_ref": "instrument.pc.locate_target", "name": "识别工控机界面目标", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "pc_02", "type": "atomic_node", "node_ref": "instrument.pc.input_action", "name": "执行鼠标键盘操作", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["pc_01"] },
+        { "instance_id": "pc_03", "type": "atomic_node", "node_ref": "instrument.pc.verify_state", "name": "核验界面结果", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["pc_02"] }
+      ] },
+      "physical_requirements": ["完成工控机屏幕坐标标定"], "capability_boundary": { "allowed": ["操作已登记的界面控件"], "forbidden": ["执行未注册系统命令"], "requires_confirmation": ["界面版本发生变化时"] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["TARGET_NOT_FOUND"] }
+    },
+    {
+      "id": "robot.meta.read_result_from_lims", "version": "1.0.0", "name": "联网仪器数据读取", "category": "robot",
+      "description": "通过LIMS或SaaS数据接口读取联网仪器检测结果。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器结束读出数据及后处理阶段"] },
+      "inputs": { "type": "object", "required": ["task_id"], "properties": { "task_id": { "type": "string" }, "sample_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["instrument_result"], "properties": { "instrument_result": { "type": "object" } } },
+      "input_hint": "任务编号或样品编号", "output_hint": "结构化仪器检测结果", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "lims_01", "type": "atomic_node", "node_ref": "instrument.data.query", "name": "查询仪器结果", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "lims_02", "type": "atomic_node", "node_ref": "instrument.data.normalize", "name": "转换为统一数据结构", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["lims_01"] }
+      ] },
+      "physical_requirements": [], "capability_boundary": { "allowed": ["只读获取检测结果"], "forbidden": ["修改仪器原始数据"], "requires_confirmation": [] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 2, "retryable_errors": ["DATA_INTERFACE_UNAVAILABLE"] }
+    },
+    {
+      "id": "robot.meta.read_result_from_screen", "version": "1.0.0", "name": "非联网仪器屏幕数据读取", "category": "robot",
+      "description": "通过摄像头和视觉识别读取未联网仪器屏幕数据。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器结束读出数据及后处理阶段"] },
+      "inputs": { "type": "object", "required": ["device_id"], "properties": { "device_id": { "type": "string" }, "image": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["recognized_result", "confidence"], "properties": { "recognized_result": { "type": "object" }, "confidence": { "type": "number" } } },
+      "input_hint": "仪器屏幕图像和显示区域定义", "output_hint": "带置信度的结构化读数", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "screen_01", "type": "atomic_node", "node_ref": "vision.instrument.capture_screen", "name": "采集仪器屏幕", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "screen_02", "type": "atomic_node", "node_ref": "vision.instrument.recognize_result", "name": "识别屏幕结果", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["screen_01"] }
+      ] },
+      "physical_requirements": ["摄像头能够清晰看到屏幕"], "capability_boundary": { "allowed": ["读取显示内容"], "forbidden": ["低置信度结果直接进入报告"], "requires_confirmation": ["识别置信度低于阈值时"] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 2, "retryable_errors": ["IMAGE_UNCLEAR"] }
+    },
+    {
+      "id": "robot.meta.generate_word_report", "version": "1.0.0", "name": "实验报告模板生成", "category": "robot",
+      "description": "把结构化检测数据填入指定Word模板。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器结束读出数据及后处理阶段"] },
+      "inputs": { "type": "object", "required": ["template_id", "experiment_data"], "properties": { "template_id": { "type": "string" }, "experiment_data": { "type": "object" } } },
+      "outputs": { "type": "object", "required": ["document_path"], "properties": { "document_path": { "type": "string" } } },
+      "input_hint": "报告模板和结构化实验数据", "output_hint": "已生成的Word报告", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "report_01", "type": "atomic_node", "node_ref": "report.template.validate", "name": "校验模板与数据", "source_type": "software_interface", "execution_policy": "agent_allowed" },
+        { "instance_id": "report_02", "type": "atomic_node", "node_ref": "report.template.fill", "name": "填充Word模板", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["report_01"] },
+        { "instance_id": "report_03", "type": "atomic_node", "node_ref": "report.document.verify", "name": "核验报告文件", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["report_02"] }
+      ] },
+      "physical_requirements": [], "capability_boundary": { "allowed": ["生成报告草稿"], "forbidden": ["伪造缺失检测数据"], "requires_confirmation": ["正式签发报告前"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.heat_sample", "version": "1.0.0", "name": "样品定时加热", "category": "robot",
+      "description": "使用已登记的加热设备将样品加热至指定温度并保持指定时长。", "status": "draft", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "实验室基础仪器操作需求", "sections": ["加热"] },
+      "inputs": { "type": "object", "required": ["sample_id", "heater_id", "temperature_c", "completion_condition"], "properties": { "sample_id": { "type": "string" }, "heater_id": { "type": "string" }, "temperature_c": { "type": "number" }, "duration_seconds": { "type": ["integer", "null"], "minimum": 1 }, "completion_condition": { "type": "string", "enum": ["duration_elapsed", "target_temperature_reached"] }, "container_type": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["heating_completed", "temperature_log"], "properties": { "heating_completed": { "type": "boolean" }, "temperature_log": { "type": "array" } } },
+      "input_hint": "样品、加热设备、目标温度、持续时间和容器类型", "output_hint": "加热完成状态与温度记录", "precondition_refs": ["instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "heat_01", "type": "atomic_node", "node_ref": "instrument.heater.verify_setup", "name": "核验加热设备与容器", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "heat_02", "type": "atomic_node", "node_ref": "instrument.heater.configure", "name": "设置温度与持续时间", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["heat_01"] },
+        { "instance_id": "heat_03", "type": "atomic_node", "node_ref": "instrument.heater.run", "name": "执行并监测加热", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["heat_02"] },
+        { "instance_id": "heat_04", "type": "atomic_node", "node_ref": "instrument.heater.verify_completion", "name": "核验加热完成状态", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["heat_03"] }
+      ] },
+      "physical_requirements": ["加热设备型号与控制接口已登记", "样品容器耐受目标温度", "温度传感器和安全互锁可用"], "capability_boundary": { "allowed": ["在设备额定范围内定时加热"], "forbidden": ["未知容器直接加热", "超过设备温度上限", "关闭安全互锁"], "requires_confirmation": ["首次使用设备或样品类型变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "hardware_binding": "pending", "simulation_only": true }
+    },
+    {
+      "id": "robot.meta.mix_sample", "version": "1.0.0", "name": "样品摇匀混合", "category": "robot",
+      "description": "使用已登记的摇床或混匀设备按指定方式、转速和时长处理样品。", "status": "draft", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "实验室基础仪器操作需求", "sections": ["摇匀与混合"] },
+      "inputs": { "type": "object", "required": ["sample_id", "mixer_id", "method", "completion_condition"], "properties": { "sample_id": { "type": "string" }, "mixer_id": { "type": "string" }, "method": { "type": "string", "enum": ["shake", "mix", "vortex"] }, "speed_rpm": { "type": ["number", "null"] }, "duration_seconds": { "type": ["integer", "null"], "minimum": 1 }, "completion_condition": { "type": "string", "enum": ["duration_elapsed", "sensor_or_human_confirmation"] } } },
+      "outputs": { "type": "object", "required": ["mixing_completed"], "properties": { "mixing_completed": { "type": "boolean" }, "operation_log": { "type": "object" } } },
+      "input_hint": "样品、混匀设备、处理方式、转速和持续时间", "output_hint": "混匀完成状态与操作记录", "precondition_refs": ["instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "mix_01", "type": "atomic_node", "node_ref": "instrument.mixer.verify_setup", "name": "核验设备与样品固定状态", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "mix_02", "type": "atomic_node", "node_ref": "instrument.mixer.configure", "name": "设置方式、转速与时间", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["mix_01"] },
+        { "instance_id": "mix_03", "type": "atomic_node", "node_ref": "instrument.mixer.run", "name": "执行摇匀或混合", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["mix_02"] },
+        { "instance_id": "mix_04", "type": "atomic_node", "node_ref": "instrument.mixer.verify_completion", "name": "核验混匀完成状态", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["mix_03"] }
+      ] },
+      "physical_requirements": ["混匀设备型号和控制接口已登记", "样品容器已可靠固定", "转速不超过容器和设备限制"], "capability_boundary": { "allowed": ["按登记参数执行摇匀、混匀或涡旋"], "forbidden": ["容器未固定时启动", "使用未验证转速"], "requires_confirmation": ["首次使用设备、容器或新转速时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "hardware_binding": "pending", "simulation_only": true }
+    },
+    {
+      "id": "robot.meta.hold_sample", "version": "1.0.0", "name": "样品定时静置", "category": "robot",
+      "description": "将样品放置在已登记位置并保持静止至指定时长结束。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "system_requirement", "reference": "实验室基础仪器操作需求", "sections": ["静置"] },
+      "inputs": { "type": "object", "required": ["sample_id", "location_id", "duration_seconds"], "properties": { "sample_id": { "type": "string" }, "location_id": { "type": "string" }, "duration_seconds": { "type": "integer", "minimum": 1 }, "environment_requirement": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["holding_completed"], "properties": { "holding_completed": { "type": "boolean" }, "started_at": { "type": "string" }, "finished_at": { "type": "string" } } },
+      "input_hint": "样品、静置位置、持续时间和环境要求", "output_hint": "静置完成状态与起止时间", "precondition_refs": ["spatial.locations.verified"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "hold_01", "type": "atomic_node", "node_ref": "sample.hold.verify_location", "name": "核验静置位置与样品状态", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "hold_02", "type": "atomic_node", "node_ref": "sample.hold.start_timer", "name": "登记静置开始时间", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["hold_01"] },
+        { "instance_id": "hold_03", "type": "atomic_node", "node_ref": "sample.hold.monitor", "name": "监测静置时长", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["hold_02"] },
+        { "instance_id": "hold_04", "type": "atomic_node", "node_ref": "sample.hold.complete", "name": "确认静置完成", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["hold_03"] }
+      ] },
+      "physical_requirements": ["静置位置已标定且可用", "样品在静置期间不会被其他任务移动"], "capability_boundary": { "allowed": ["在已登记位置定时静置"], "forbidden": ["占用状态未知时放置样品", "将静置等同于温控保存"], "requires_confirmation": ["静置位置或环境要求变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.receive_and_register_sample", "version": "1.0.0", "name": "样品接收与信息登记", "category": "robot",
+      "description": "核验样品交接状态并将样品编号、来源、设备和运行信息写入样品登记系统。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["样品采集与接收", "样品接收与预处理"] },
+      "inputs": { "type": "object", "required": ["sample_id", "handoff_confirmed"], "properties": { "sample_id": { "type": "string" }, "handoff_confirmed": { "type": "boolean" }, "source_mode": { "type": "string", "enum": ["customer_delivery", "onsite_sampling"] }, "equipment_id": { "type": "string" }, "oil_brand": { "type": "string" }, "runtime_hours": { "type": "number" }, "sampling_temperature_c": { "type": "number" } } },
+      "outputs": { "type": "object", "required": ["sample_record_id", "identity_verified"], "properties": { "sample_record_id": { "type": "string" }, "identity_verified": { "type": "boolean" }, "registered_fields": { "type": "object" } } },
+      "input_hint": "已完成交接的样品及其编号、来源和采样信息", "output_hint": "可供后续元操作引用的样品登记记录", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "receive_01", "type": "atomic_node", "node_ref": "sample.handoff.verify", "name": "核验样品交接确认", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "receive_02", "type": "atomic_node", "node_ref": "sample.identity.scan", "name": "读取样品标识", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["receive_01"] },
+        { "instance_id": "receive_03", "type": "atomic_node", "node_ref": "sample.registry.create", "name": "登记样品信息", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["receive_02"] },
+        { "instance_id": "receive_04", "type": "atomic_node", "node_ref": "sample.registry.verify", "name": "回读并核验登记结果", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["receive_03"] }
+      ] },
+      "physical_requirements": ["样品交接已经由人员或上游系统确认", "样品标签可读取"], "capability_boundary": { "allowed": ["登记和只读核验样品信息"], "forbidden": ["自动替代人员完成验收结论", "标识冲突时覆盖原记录"], "requires_confirmation": ["样品标识缺失、重复或交接状态未知时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 1, "retryable_errors": ["LABEL_NOT_READABLE"] },
+      "extensions": { "planner_contract": { "consumes": ["sample_handoff"], "produces": ["registered_sample"] }, "human_boundary": "handoff_confirmed must be supplied externally" }
+    },
+    {
+      "id": "robot.meta.condition_sample_water_bath", "version": "1.0.0", "name": "样品水浴恒温", "category": "robot",
+      "description": "使用已登记水浴设备将样品恒温至指定温度并记录温度过程。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["样品接收与预处理", "样品恒温"] },
+      "inputs": { "type": "object", "required": ["sample_id", "water_bath_id", "temperature_c", "completion_condition"], "properties": { "sample_id": { "type": "string" }, "water_bath_id": { "type": "string" }, "temperature_c": { "type": "number" }, "duration_seconds": { "type": ["integer", "null"], "minimum": 1 }, "completion_condition": { "type": "string", "enum": ["duration_elapsed", "sample_temperature_reached"] } } },
+      "outputs": { "type": "object", "required": ["conditioning_completed", "temperature_log"], "properties": { "conditioning_completed": { "type": "boolean" }, "temperature_log": { "type": "array" } } },
+      "input_hint": "样品、水浴设备、目标温度和完成条件", "output_hint": "恒温完成状态与温度记录", "precondition_refs": ["sample.identity.available", "sample.container.compatible", "instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "bath_01", "type": "atomic_node", "node_ref": "instrument.water_bath.verify", "name": "核验水浴设备与容器", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "bath_02", "type": "atomic_node", "node_ref": "instrument.water_bath.configure", "name": "设置恒温参数", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["bath_01"] },
+        { "instance_id": "bath_03", "type": "atomic_node", "node_ref": "instrument.water_bath.monitor", "name": "执行并监测水浴恒温", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["bath_02"] }
+      ] },
+      "physical_requirements": ["水浴设备接口和样品温度测量接口已登记", "容器耐受目标温度"], "capability_boundary": { "allowed": ["在设备额定范围内执行水浴恒温"], "forbidden": ["水分检测样品自动加热", "未知容器直接加热", "超过设备额定温度"], "requires_confirmation": ["检测方法禁止加热或温度要求缺失时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["registered_sample"], "produces": ["temperature_conditioned_sample"] }, "hardware_binding": "pending" }
+    },
+    {
+      "id": "robot.meta.filter_sample", "version": "1.0.0", "name": "样品过滤除杂", "category": "robot",
+      "description": "按检测方法要求使用已登记过滤装置去除样品杂质并记录耗材信息。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["选择性预处理", "过滤除杂"] },
+      "inputs": { "type": "object", "required": ["sample_id", "filter_device_id", "filter_profile_id", "method_requires_filtering"], "properties": { "sample_id": { "type": "string" }, "filter_device_id": { "type": "string" }, "filter_profile_id": { "type": "string" }, "method_requires_filtering": { "type": "boolean" } } },
+      "outputs": { "type": "object", "required": ["filtered_sample_id", "filtering_completed"], "properties": { "filtered_sample_id": { "type": "string" }, "filtering_completed": { "type": "boolean" }, "consumable_lot": { "type": "string" } } },
+      "input_hint": "样品、过滤设备、过滤方案和方法要求", "output_hint": "过滤后的样品身份与耗材记录", "precondition_refs": ["sample.identity.available", "sample.container.compatible", "test.method.registered"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "filter_01", "type": "atomic_node", "node_ref": "instrument.filter.verify_profile", "name": "核验过滤方案与耗材", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "filter_02", "type": "atomic_node", "node_ref": "instrument.filter.run", "name": "执行样品过滤", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["filter_01"] },
+        { "instance_id": "filter_03", "type": "atomic_node", "node_ref": "sample.filter.bind_result", "name": "登记过滤结果", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["filter_02"] }
+      ] },
+      "physical_requirements": ["过滤设备和耗材规格已经登记", "过滤前后容器身份可追溯"], "capability_boundary": { "allowed": ["仅在标准方法明确要求时过滤"], "forbidden": ["磨损金属检测样品自动过滤", "方法要求未知时自行过滤"], "requires_confirmation": ["过滤方案、孔径或耗材批次变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["registered_sample", "registered_test_method"], "produces": ["filtered_sample"] }, "hardware_binding": "pending" }
+    },
+    {
+      "id": "robot.meta.degas_sample", "version": "1.0.0", "name": "样品静置消泡", "category": "robot",
+      "description": "将样品在已登记位置静置至满足消泡判定条件，并记录起止时间。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["样品接收与预处理", "静置消泡"] },
+      "inputs": { "type": "object", "required": ["sample_id", "location_id", "completion_condition"], "properties": { "sample_id": { "type": "string" }, "location_id": { "type": "string" }, "duration_seconds": { "type": ["integer", "null"], "minimum": 1 }, "completion_condition": { "type": "string", "enum": ["duration_elapsed", "bubble_absence_verified"] } } },
+      "outputs": { "type": "object", "required": ["degassing_completed"], "properties": { "degassing_completed": { "type": "boolean" }, "started_at": { "type": "string" }, "finished_at": { "type": "string" }, "visual_evidence_ref": { "type": ["string", "null"] } } },
+      "input_hint": "样品、静置位置、时长或视觉完成条件", "output_hint": "消泡完成状态、时间和可选视觉证据", "precondition_refs": ["sample.identity.available", "spatial.locations.verified"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "degas_01", "type": "atomic_node", "node_ref": "sample.degas.start", "name": "登记消泡开始状态", "source_type": "software_interface", "execution_policy": "agent_allowed" },
+        { "instance_id": "degas_02", "type": "atomic_node", "node_ref": "sample.degas.wait", "name": "保持样品静置", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["degas_01"] },
+        { "instance_id": "degas_03", "type": "atomic_node", "node_ref": "vision.sample.verify_bubble_absence", "name": "核验消泡完成条件", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["degas_02"] }
+      ] },
+      "physical_requirements": ["静置位置已标定", "需要视觉判定时摄像头视野可用"], "capability_boundary": { "allowed": ["按规定时长静置或调用已验证视觉判定"], "forbidden": ["未达到完成条件时进入检测", "将消泡等同于过滤"], "requires_confirmation": ["无时长且视觉接口未接入时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["mixed_sample"], "produces": ["degassed_sample"] }, "vision_binding": "pending" }
+    },
+    {
+      "id": "instrument.meta.prepare_test_method", "version": "1.0.0", "name": "检测方法选择与仪器校准准备", "category": "instrument", "instrument_id": "generic",
+      "description": "根据检测项目选择已登记标准方法，核验试剂要求并确认目标仪器校准状态。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["任务派发与实验室检测执行", "选定标准方法", "仪器开机校准"] },
+      "inputs": { "type": "object", "required": ["test_item", "method_id", "device_id"], "properties": { "test_item": { "type": "string" }, "method_id": { "type": "string" }, "device_id": { "type": "string" }, "reagent_requirements": { "type": "array" } } },
+      "outputs": { "type": "object", "required": ["method_ready", "calibration_state"], "properties": { "method_ready": { "type": "boolean" }, "calibration_state": { "type": "string" }, "method_constraints": { "type": "object" } } },
+      "input_hint": "检测项目、标准方法、目标仪器和试剂要求", "output_hint": "方法约束与仪器校准准备状态", "precondition_refs": ["test.method.registered"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "method_01", "type": "atomic_node", "node_ref": "test.method_registry.resolve", "name": "读取标准方法与预处理约束", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "method_02", "type": "atomic_node", "node_ref": "instrument.reagent.verify", "name": "核验试剂准备状态", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["method_01"] },
+        { "instance_id": "method_03", "type": "atomic_node", "node_ref": "instrument.calibration.verify", "name": "核验仪器校准状态", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["method_01"] }
+      ] },
+      "physical_requirements": ["标准方法库、试剂台账和设备校准接口可用"], "capability_boundary": { "allowed": ["选择已登记方法并读取准备状态"], "forbidden": ["自动修改标准方法", "自动认可过期校准或试剂"], "requires_confirmation": ["方法冲突、试剂缺失或校准过期时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["test_request"], "produces": ["registered_test_method", "device_ready_state"] }, "supported_test_families": ["physical_chemistry", "contamination", "elemental_analysis", "infrared_spectroscopy", "ferrography", "other_registered_method"] }
+    },
+    {
+      "id": "instrument.meta.run_registered_project_test", "version": "1.0.0", "name": "已登记检测项目执行接口", "category": "instrument", "instrument_id": "generic",
+      "description": "向已登记检测设备下发标准方法和样品信息，并接收结构化检测结果。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["试验检测（项目测试）"] },
+      "inputs": { "type": "object", "required": ["sample_id", "test_item", "method_id", "device_id"], "properties": { "sample_id": { "type": "string" }, "test_item": { "type": "string" }, "method_id": { "type": "string" }, "device_id": { "type": "string" }, "prepared_sample_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["test_status", "result_payload"], "properties": { "test_status": { "type": "string" }, "result_payload": { "type": ["object", "null"] }, "evidence_refs": { "type": "array" } } },
+      "input_hint": "样品、检测项目、标准方法和已登记设备", "output_hint": "检测状态、结构化结果与证据引用", "precondition_refs": ["sample.identity.available", "test.method.registered", "instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "project_test_01", "type": "atomic_node", "node_ref": "instrument.test.verify_binding", "name": "核验设备与方法绑定", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "project_test_02", "type": "atomic_node", "node_ref": "instrument.test.execute", "name": "调用设备检测接口", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["project_test_01"] },
+        { "instance_id": "project_test_03", "type": "atomic_node", "node_ref": "instrument.test.collect_result", "name": "接收并核验结构化结果", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["project_test_02"] }
+      ] },
+      "physical_requirements": ["设备、方法和结果接口均已登记并验证", "样品已经完成方法规定的预处理和装载"], "capability_boundary": { "allowed": ["调用已登记设备与方法组合"], "forbidden": ["根据项目名称猜测设备或方法", "调用未登记设备", "伪造缺失检测结果"], "requires_confirmation": ["检测项目没有唯一设备与方法绑定时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["prepared_sample", "registered_test_method", "device_ready_state"], "produces": ["structured_test_result"] }, "device_bindings": "pending" }
+    },
+    {
+      "id": "robot.meta.transfer_object", "version": "1.0.0", "name": "机械臂物体点到点搬运", "category": "robot",
+      "description": "使用机械臂将已识别物体从已登记起点抓取并放置到已登记终点。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "system_requirement", "reference": "实验室基础物理位移需求", "sections": ["机械臂物理位移"] },
+      "inputs": { "type": "object", "required": ["object_id", "source_location_id", "target_location_id"], "properties": { "object_id": { "type": "string" }, "source_location_id": { "type": "string" }, "target_location_id": { "type": "string" }, "grasp_profile_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["placement_verified", "final_location_id"], "properties": { "placement_verified": { "type": "boolean" }, "final_location_id": { "type": "string" } } },
+      "input_hint": "物体、起始位置、目标位置和抓取配置", "output_hint": "放置确认与最终位置", "precondition_refs": ["route.available", "spatial.locations.verified"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "transfer_01", "type": "atomic_node", "node_ref": "robot.object.verify_identity", "name": "核验物体身份与起点", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "transfer_02", "type": "atomic_node", "node_ref": "robot.object.plan_motion", "name": "规划无碰撞位移路径", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["transfer_01"] },
+        { "instance_id": "transfer_03", "type": "atomic_node", "node_ref": "robot.object.pick", "name": "抓取物体", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["transfer_02"] },
+        { "instance_id": "transfer_04", "type": "atomic_node", "node_ref": "robot.object.move", "name": "执行物理位移", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["transfer_03"] },
+        { "instance_id": "transfer_05", "type": "atomic_node", "node_ref": "robot.object.place_and_verify", "name": "放置并核验目标位置", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["transfer_04"] }
+      ] },
+      "physical_requirements": ["起点和终点已完成现场标定", "物体抓取配置已示教", "运动路径无障碍且目标位置可用"], "capability_boundary": { "allowed": ["在已登记位置之间搬运已识别物体"], "forbidden": ["使用占位坐标执行", "抓取未知物体", "目标位置被占用时放置"], "requires_confirmation": ["首次路线、物体或夹具变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "default_source_location_id": "lab.location.sample_checkin_station", "default_target_location_id": "lab.location.vd10_station", "spatial_registry": "data/spatial-locations.json" }
+    },
+    {
+      "id": "robot.meta.register_tube_pose", "version": "1.0.0", "name": "试管识别与位置标定", "category": "robot",
+      "description": "夹取试管、读取二维码并建立试管与试管架位置关联。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["前置预处理流程"] },
+      "inputs": { "type": "object", "required": ["rack_id"], "properties": { "rack_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["tube_pose_map"], "properties": { "tube_pose_map": { "type": "object" } } },
+      "input_hint": "已贴二维码的试管和试管架", "output_hint": "二维码、试管和试管架位置映射", "precondition_refs": ["sample.tube.qr_attached"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "register_01", "type": "atomic_node", "node_ref": "robot.tube.locate", "name": "定位试管", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation" },
+        { "instance_id": "register_02", "type": "atomic_node", "node_ref": "robot.tube.pick", "name": "夹取试管", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["register_01"] },
+        { "instance_id": "register_03", "type": "atomic_node", "node_ref": "vision.tube.read_qr", "name": "读取二维码", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["register_02"] },
+        { "instance_id": "register_04", "type": "atomic_node", "node_ref": "robot.tube.return_to_rack", "name": "放回试管架", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["register_03"] },
+        { "instance_id": "register_05", "type": "atomic_node", "node_ref": "sample.tube.bind_pose", "name": "绑定身份与位置", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["register_04"] }
+      ] },
+      "physical_requirements": ["夹爪适配试管", "二维码可见"], "capability_boundary": { "allowed": ["读取标识并建立位置映射"], "forbidden": ["无二维码时猜测试管身份"], "requires_confirmation": ["首次标定试管架时"] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["QR_NOT_READABLE"] }
+    },
+    {
+      "id": "robot.meta.aliquot_sample", "version": "1.0.0", "name": "样品定量分装", "category": "robot",
+      "description": "使用机械臂和固定移液枪按数量、体积完成多次分样。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["前置预处理流程"] },
+      "inputs": { "type": "object", "required": ["sample_id", "target_count", "volume_each"], "properties": { "sample_id": { "type": "string" }, "target_count": { "type": "integer", "minimum": 1 }, "volume_each": { "type": "number", "unit": "ml" } } },
+      "outputs": { "type": "object", "required": ["aliquots"], "properties": { "aliquots": { "type": "array" } } },
+      "input_hint": "样品、分装数量、单份体积", "output_hint": "与二维码和位置关联的定量分装样品", "precondition_refs": ["sample.tube.qr_attached"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "aliquot_01", "type": "atomic_node", "node_ref": "robot.pipette.pick", "name": "抓取移液枪", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation" },
+        { "instance_id": "aliquot_02", "type": "atomic_node", "node_ref": "robot.pipette.aspirate", "name": "定量吸取样品", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["aliquot_01"] },
+        { "instance_id": "aliquot_03", "type": "atomic_node", "node_ref": "robot.pipette.dispense", "name": "分配至目标试管", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["aliquot_02"] },
+        { "instance_id": "aliquot_04", "type": "atomic_node", "node_ref": "sample.aliquot.bind_identity", "name": "关联试管身份与位置", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["aliquot_03"] }
+      ] },
+      "physical_requirements": ["确认移液枪量程和枪头", "确认样品与目标试管位置"], "capability_boundary": { "allowed": ["在量程内定量分装"], "forbidden": ["超量程移液", "未确认容器时分装"], "requires_confirmation": ["更换样品类型或容器时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.load_tube_to_agv", "version": "1.0.0", "name": "试管装载至AGV", "category": "robot",
+      "description": "将指定试管从试管架夹取并放置到AGV接收位置。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["分样后样品配送过程"] },
+      "inputs": { "type": "object", "required": ["tube_ids"], "properties": { "tube_ids": { "type": "array" }, "agv_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["loaded_tubes"], "properties": { "loaded_tubes": { "type": "array" } } },
+      "input_hint": "试管列表、试管架位置、AGV接收位", "output_hint": "已装载到AGV的试管列表", "precondition_refs": ["route.available"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "load_agv_01", "type": "atomic_node", "node_ref": "robot.tube.pick_from_rack", "name": "从试管架夹取试管", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation" },
+        { "instance_id": "load_agv_02", "type": "atomic_node", "node_ref": "robot.tube.move_to_agv", "name": "移动至AGV接收位", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["load_agv_01"] },
+        { "instance_id": "load_agv_03", "type": "atomic_node", "node_ref": "robot.tube.place_on_agv", "name": "放置试管", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["load_agv_02"] }
+      ] },
+      "physical_requirements": ["AGV已到达装载位", "AGV接收装置可用"], "capability_boundary": { "allowed": ["逐支搬运试管"], "forbidden": ["AGV未锁定时装载"], "requires_confirmation": ["AGV接收装置变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "lab.meta.transfer_sample_by_agv", "version": "1.0.0", "name": "AGV工位间样品运输", "category": "lab",
+      "description": "驱动AGV将已装载样品运输到目标仪器工位。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["分样后样品配送过程"] },
+      "inputs": { "type": "object", "required": ["source_station", "target_station"], "properties": { "source_station": { "type": "string" }, "target_station": { "type": "string" }, "sample_count": { "type": "integer" } } },
+      "outputs": { "type": "object", "required": ["arrival_confirmed"], "properties": { "arrival_confirmed": { "type": "boolean" }, "target_station": { "type": "string" } } },
+      "input_hint": "起始工位、目标工位、样品列表", "output_hint": "AGV到达目标工位并保持样品关联", "precondition_refs": ["route.available"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "agv_01", "type": "atomic_node", "node_ref": "agv.route.plan", "name": "规划工位间路线", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "agv_02", "type": "atomic_node", "node_ref": "agv.route.execute", "name": "执行AGV运输", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["agv_01"] },
+        { "instance_id": "agv_03", "type": "atomic_node", "node_ref": "agv.station.verify_arrival", "name": "确认到达目标工位", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["agv_02"] }
+      ] },
+      "physical_requirements": ["通道可用", "目标工位允许停靠"], "capability_boundary": { "allowed": ["已登记工位间运输"], "forbidden": ["路径状态未知时移动"], "requires_confirmation": ["新路线首次运行时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.prepare_and_load_instrument", "version": "1.0.0", "name": "检测仪器送样准备与装载", "category": "robot",
+      "description": "按照指定仪器操作树完成样品预处理装置准备和送入。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["样品送样及送入阶段"] },
+      "inputs": { "type": "object", "required": ["sample_id", "target_device"], "properties": { "sample_id": { "type": "string" }, "target_device": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["sample_loaded"], "properties": { "sample_loaded": { "type": "boolean" }, "setup_state": { "type": "object" } } },
+      "input_hint": "样品、目标仪器及其装载操作树", "output_hint": "样品已送入且装置状态已记录", "precondition_refs": ["route.available"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "instrument_load_01", "type": "atomic_node", "node_ref": "robot.instrument.prepare_setup", "name": "准备检测装置", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation" },
+        { "instance_id": "instrument_load_02", "type": "atomic_node", "node_ref": "robot.instrument.transfer_sample", "name": "将样品送入装置", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["instrument_load_01"] },
+        { "instance_id": "instrument_load_03", "type": "atomic_node", "node_ref": "robot.instrument.verify_setup", "name": "核验装载状态", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["instrument_load_02"] }
+      ] },
+      "physical_requirements": ["目标仪器装载步骤已示教并核验"], "capability_boundary": { "allowed": ["执行已登记仪器的装载树"], "forbidden": ["为未知仪器自动生成物理动作"], "requires_confirmation": ["首次装载或仪器结构变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.control_receiver_door", "version": "1.0.0", "name": "接收室舱门控制", "category": "robot",
+      "description": "通过独立执行装置开启、确认并关闭仪器接收室舱门。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["样品送样及送入阶段"] },
+      "inputs": { "type": "object", "required": ["target_state"], "properties": { "target_state": { "type": "string", "enum": ["open", "closed"] } } },
+      "outputs": { "type": "object", "required": ["door_state"], "properties": { "door_state": { "type": "string" } } },
+      "input_hint": "目标舱门状态", "output_hint": "机器确认的舱门状态", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "door_01", "type": "atomic_node", "node_ref": "robot.receiver_door.actuate", "name": "执行舱门动作", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation" },
+        { "instance_id": "door_02", "type": "atomic_node", "node_ref": "robot.receiver_door.verify_state", "name": "确认舱门状态", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["door_01"] }
+      ] },
+      "physical_requirements": ["独立舱门执行装置已安装"], "capability_boundary": { "allowed": ["开关指定接收室舱门"], "forbidden": ["状态不可读时继续后续操作"], "requires_confirmation": ["防夹或互锁状态未知时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.operate_touchscreen", "version": "1.0.0", "name": "机械臂触摸屏操作", "category": "robot",
+      "description": "使用机械臂触摸手指操作已标定的仪器触摸屏。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器控制阶段"] },
+      "inputs": { "type": "object", "required": ["target_control"], "properties": { "target_control": { "type": "string" }, "expected_page": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["action_verified"], "properties": { "action_verified": { "type": "boolean" }, "page_state": { "type": "object" } } },
+      "input_hint": "已标定控件和预期页面", "output_hint": "触控结果与页面状态", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "touch_01", "type": "atomic_node", "node_ref": "robot.touchscreen.locate_control", "name": "定位触屏控件", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "touch_02", "type": "atomic_node", "node_ref": "robot.touchscreen.tap", "name": "机械臂触碰控件", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["touch_01"] },
+        { "instance_id": "touch_03", "type": "atomic_node", "node_ref": "robot.touchscreen.verify", "name": "验证页面变化", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["touch_02"] }
+      ] },
+      "physical_requirements": ["触摸屏坐标和接触力已标定"], "capability_boundary": { "allowed": ["触碰已登记控件"], "forbidden": ["盲点或连续试探点击"], "requires_confirmation": ["页面布局变化时"] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["TARGET_NOT_FOUND"] }
+    },
+    {
+      "id": "robot.meta.operate_physical_keyboard", "version": "1.0.0", "name": "机械臂实体键盘操作", "category": "robot",
+      "description": "使用机械臂触摸手指操作已标定的实体键盘。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器控制阶段"] },
+      "inputs": { "type": "object", "required": ["key_sequence"], "properties": { "key_sequence": { "type": "array" } } },
+      "outputs": { "type": "object", "required": ["input_verified"], "properties": { "input_verified": { "type": "boolean" } } },
+      "input_hint": "按键序列和预期输入结果", "output_hint": "按键执行与输入核验结果", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "keyboard_01", "type": "atomic_node", "node_ref": "robot.keyboard.locate_key", "name": "定位实体按键", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "keyboard_02", "type": "atomic_node", "node_ref": "robot.keyboard.press", "name": "按下实体按键", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["keyboard_01"] },
+        { "instance_id": "keyboard_03", "type": "atomic_node", "node_ref": "robot.keyboard.verify_input", "name": "核验输入结果", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["keyboard_02"] }
+      ] },
+      "physical_requirements": ["键盘坐标和按压力已标定"], "capability_boundary": { "allowed": ["操作已登记按键"], "forbidden": ["输入未授权内容"], "requires_confirmation": ["键盘布局变化时"] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["TARGET_NOT_FOUND"] }
+    },
+    {
+      "id": "robot.meta.unload_test_assembly", "version": "1.0.0", "name": "测试装置拆卸与转运", "category": "robot",
+      "description": "测试结束后执行经过验证的逆操作，将装置移至待清洗工位。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "robot_operation_document", "reference": "机器人操作（机械臂部分）.docx", "sections": ["仪器结束读出数据及后处理阶段"] },
+      "inputs": { "type": "object", "required": ["device_id", "cleaning_station"], "properties": { "device_id": { "type": "string" }, "cleaning_station": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["assembly_unloaded"], "properties": { "assembly_unloaded": { "type": "boolean" }, "final_location": { "type": "string" } } },
+      "input_hint": "已结束的测试装置和待清洗工位", "output_hint": "装置已拆卸并放到待清洗位置", "precondition_refs": ["route.available"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "unload_01", "type": "atomic_node", "node_ref": "robot.instrument.verify_test_finished", "name": "确认测试结束", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "unload_02", "type": "atomic_node", "node_ref": "robot.instrument.reverse_unload", "name": "执行装置逆向拆卸", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["unload_01"] },
+        { "instance_id": "unload_03", "type": "atomic_node", "node_ref": "robot.instrument.move_to_cleaning", "name": "转运至待清洗工位", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["unload_02"] }
+      ] },
+      "physical_requirements": ["测试结束状态可确认", "逆操作已验证", "清洗工位可用"], "capability_boundary": { "allowed": ["执行已验证的拆卸树"], "forbidden": ["高温、运行中或状态未知时拆卸"], "requires_confirmation": ["首次执行逆操作时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "robot.meta.collect_sample", "version": "1.0.0", "name": "规范取样与采样记录", "category": "robot",
+      "description": "在已登记取样点清洁取样工具、采集样品、记录环境信息并保持样品身份关联。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["取样（采样）"] },
+      "inputs": { "type": "object", "required": ["sampling_point_id", "equipment_id", "target_volume_ml", "container_id"], "properties": { "sampling_point_id": { "type": "string" }, "equipment_id": { "type": "string" }, "target_volume_ml": { "type": "number", "minimum": 0 }, "container_id": { "type": "string" }, "oil_brand": { "type": "string" }, "runtime_hours": { "type": "number" }, "cleaning_profile_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["sample_id", "collected_volume_ml", "sampling_record"], "properties": { "sample_id": { "type": "string" }, "collected_volume_ml": { "type": "number" }, "sampling_record": { "type": "object" } } },
+      "input_hint": "取样点、设备、目标体积、容器和清洁方案", "output_hint": "带身份和采样环境记录的样品", "precondition_refs": ["spatial.locations.verified", "sample.container.compatible"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "collect_01", "type": "atomic_node", "node_ref": "robot.sampling.verify_context", "name": "核验取样点与设备信息", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "collect_02", "type": "atomic_node", "node_ref": "robot.sampling.clean_tool", "name": "按方案清洁取样工具", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["collect_01"] },
+        { "instance_id": "collect_03", "type": "atomic_node", "node_ref": "robot.sampling.collect", "name": "执行定量取样", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["collect_02"] },
+        { "instance_id": "collect_04", "type": "atomic_node", "node_ref": "sample.sampling.record", "name": "记录体积、环境和温度", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["collect_03"] }
+      ] },
+      "physical_requirements": ["取样点和机器人接近位姿已经标定", "取样工具清洁方案已经验证", "容器与样品兼容"], "capability_boundary": { "allowed": ["在已登记取样点执行已示教取样"], "forbidden": ["未知介质取样", "跳过清洁步骤", "取样点或设备身份不一致时继续"], "requires_confirmation": ["首次取样点、样品类型或工具变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["sampling_request"], "produces": ["collected_sample"] }, "robot_teaching": "pending" }
+    },
+    {
+      "id": "robot.meta.seal_and_label_sample", "version": "1.0.0", "name": "样品密封与标识绑定", "category": "robot",
+      "description": "密封样品容器、贴装或读取标签，并将标签与样品记录绑定。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["取样（采样）", "密封与标识"] },
+      "inputs": { "type": "object", "required": ["sample_id", "container_id", "label_id"], "properties": { "sample_id": { "type": "string" }, "container_id": { "type": "string" }, "label_id": { "type": "string" }, "seal_profile_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["sealed", "identity_binding_verified"], "properties": { "sealed": { "type": "boolean" }, "identity_binding_verified": { "type": "boolean" }, "evidence_ref": { "type": ["string", "null"] } } },
+      "input_hint": "样品、容器、标签和密封方案", "output_hint": "已密封且身份绑定可核验的样品", "precondition_refs": ["sample.container.compatible"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "label_01", "type": "atomic_node", "node_ref": "robot.sample.seal", "name": "执行容器密封", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation" },
+        { "instance_id": "label_02", "type": "atomic_node", "node_ref": "robot.sample.apply_label", "name": "贴装样品标签", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["label_01"] },
+        { "instance_id": "label_03", "type": "atomic_node", "node_ref": "vision.sample.verify_label", "name": "读取并核验标签", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["label_02"] },
+        { "instance_id": "label_04", "type": "atomic_node", "node_ref": "sample.identity.bind_container", "name": "绑定样品、容器与标签", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["label_03"] }
+      ] },
+      "physical_requirements": ["密封装置与标签装置已示教", "标签在视觉读取范围内"], "capability_boundary": { "allowed": ["处理已登记容器与标签"], "forbidden": ["标签读取失败时猜测身份", "密封状态未知时进入运输"], "requires_confirmation": ["容器或密封方式变化时"] },
+      "failure_policy": { "default_action": "retry_then_stop", "max_retries": 1, "retryable_errors": ["LABEL_NOT_READABLE"] },
+      "extensions": { "planner_contract": { "consumes": ["collected_sample"], "produces": ["identified_sealed_sample"] }, "robot_teaching": "pending" }
+    },
+    {
+      "id": "robot.meta.inspect_sample_appearance", "version": "1.0.0", "name": "样品外观视觉初检", "category": "robot",
+      "description": "采集样品图像并输出外观、颜色、乳化、沉淀和游离水等可观察特征。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["取样（采样）", "目视初检"] },
+      "inputs": { "type": "object", "required": ["sample_id", "camera_id", "inspection_profile_id"], "properties": { "sample_id": { "type": "string" }, "camera_id": { "type": "string" }, "inspection_profile_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["appearance_features", "evidence_refs"], "properties": { "appearance_features": { "type": "object" }, "evidence_refs": { "type": "array" }, "manual_review_required": { "type": "boolean" } } },
+      "input_hint": "已标识样品、摄像头和视觉检测方案", "output_hint": "结构化外观特征、证据和人工复核标志", "precondition_refs": ["sample.identity.available"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "appearance_01", "type": "atomic_node", "node_ref": "vision.sample.capture", "name": "采集标准化样品图像", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "appearance_02", "type": "atomic_node", "node_ref": "vision.sample.extract_features", "name": "识别可观察外观特征", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["appearance_01"] },
+        { "instance_id": "appearance_03", "type": "atomic_node", "node_ref": "sample.appearance.store_result", "name": "保存特征与图像证据", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["appearance_02"] }
+      ] },
+      "physical_requirements": ["光照、背景和摄像头位置已经标定", "样品可在不破坏密封的条件下观察"], "capability_boundary": { "allowed": ["输出可观察特征和复核建议"], "forbidden": ["仅凭外观给出化学检测结论", "图像质量不足时输出确定结论"], "requires_confirmation": ["出现异常特征或置信度不足时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 1, "retryable_errors": ["IMAGE_QUALITY_LOW"] },
+      "extensions": { "planner_contract": { "consumes": ["identified_sealed_sample"], "produces": ["appearance_inspected_sample"] }, "vision_model": "pending" }
+    },
+    {
+      "id": "robot.meta.load_unload_processing_device", "version": "1.0.0", "name": "样品预处理设备上下料", "category": "robot",
+      "description": "按已验证设备配置将样品装入或取出水浴、摇匀、静置或过滤等预处理设备。", "status": "draft", "execution_policy": "requires_physical_confirmation",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["样品接收与预处理"] },
+      "inputs": { "type": "object", "required": ["sample_id", "device_id", "action", "slot_id"], "properties": { "sample_id": { "type": "string" }, "device_id": { "type": "string" }, "action": { "type": "string", "enum": ["load", "unload"] }, "slot_id": { "type": "string" }, "handling_profile_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["handling_completed", "sample_location_id"], "properties": { "handling_completed": { "type": "boolean" }, "sample_location_id": { "type": "string" }, "placement_verified": { "type": "boolean" } } },
+      "input_hint": "样品、预处理设备、装入或取出动作及槽位", "output_hint": "上下料完成状态与样品最终位置", "precondition_refs": ["sample.identity.available", "spatial.locations.verified", "instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "handling_01", "type": "atomic_node", "node_ref": "robot.processing_device.verify_binding", "name": "核验设备、槽位和抓取配置", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "handling_02", "type": "atomic_node", "node_ref": "robot.processing_device.transfer", "name": "执行预处理设备上下料", "source_type": "robot_teaching", "execution_policy": "requires_physical_confirmation", "depends_on": ["handling_01"] },
+        { "instance_id": "handling_03", "type": "atomic_node", "node_ref": "robot.processing_device.verify_placement", "name": "核验样品最终位置", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["handling_02"] }
+      ] },
+      "physical_requirements": ["设备槽位、接近位姿和抓取动作已示教", "设备处于允许上下料状态"], "capability_boundary": { "allowed": ["操作已登记且已验证的预处理设备槽位"], "forbidden": ["设备运行中强制上下料", "为未知设备推测动作"], "requires_confirmation": ["首次设备、槽位或容器变化时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["registered_sample", "processing_request"], "produces": ["sample_at_processing_device"] }, "robot_teaching": "pending" }
+    },
+    {
+      "id": "lab.meta.cross_zone_transport", "version": "1.0.0", "name": "实验室跨区域转运", "category": "lab",
+      "description": "协调门禁、楼层和实验室通道完成样品或机器人跨区域转运。", "status": "draft", "execution_policy": "requires_environment_confirmation",
+      "source": { "type": "system_requirement", "reference": "实验室总体任务需求", "sections": ["上下楼与门禁"] },
+      "inputs": { "type": "object", "required": ["source_zone", "target_zone"], "properties": { "source_zone": { "type": "string" }, "target_zone": { "type": "string" }, "destination_floor": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["arrival_confirmed"], "properties": { "arrival_confirmed": { "type": "boolean" }, "final_zone": { "type": "string" } } },
+      "input_hint": "起始区域、目标区域、目标楼层和通行权限", "output_hint": "到达目标区域的机器确认", "precondition_refs": ["route.available"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "zone_01", "type": "atomic_node", "node_ref": "lab.access.request", "name": "请求区域通行", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "zone_02", "type": "atomic_node", "node_ref": "lab.access.open", "name": "打开门禁或通道", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["zone_01"] },
+        { "instance_id": "zone_03", "type": "atomic_node", "node_ref": "lab.floor.transfer", "name": "执行跨楼层或跨区域移动", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["zone_02"] },
+        { "instance_id": "zone_04", "type": "atomic_node", "node_ref": "lab.zone.verify_arrival", "name": "确认到达目标区域", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["zone_03"] }
+      ] },
+      "physical_requirements": ["门禁、电梯和通道接口可用", "目标区域允许进入"], "capability_boundary": { "allowed": ["在授权区域间转运"], "forbidden": ["绕过门禁或未知通道移动"], "requires_confirmation": ["环境接口未接入时"] },
+      "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "lab.meta.resolve_test_destination", "version": "1.0.0", "name": "检测任务科室与设备路由", "category": "lab",
+      "description": "根据已登记检测项目解析目标科室、设备和空间位置，不执行实际运输。", "status": "draft", "execution_policy": "agent_allowed_with_machine_precheck",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["任务派发与实验室检测执行", "检测科室流转"] },
+      "inputs": { "type": "object", "required": ["test_items"], "properties": { "test_items": { "type": "array" }, "sample_id": { "type": "string" }, "routing_constraints": { "type": "object" } } },
+      "outputs": { "type": "object", "required": ["route_assignments", "all_items_resolved"], "properties": { "route_assignments": { "type": "array" }, "all_items_resolved": { "type": "boolean" }, "unresolved_items": { "type": "array" } } },
+      "input_hint": "检测项目列表、样品和路由约束", "output_hint": "项目到科室、设备和位置的明确映射", "precondition_refs": ["test.method.registered"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "route_test_01", "type": "atomic_node", "node_ref": "lab.test_route.lookup", "name": "查询检测项目路由表", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck" },
+        { "instance_id": "route_test_02", "type": "atomic_node", "node_ref": "lab.test_route.resolve_device", "name": "解析目标科室与设备", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["route_test_01"] },
+        { "instance_id": "route_test_03", "type": "atomic_node", "node_ref": "spatial.location_registry.resolve", "name": "解析设备空间位置", "source_type": "software_interface", "execution_policy": "agent_allowed_with_machine_precheck", "depends_on": ["route_test_02"] }
+      ] },
+      "physical_requirements": ["检测项目路由表、设备注册表和空间位置库可用"], "capability_boundary": { "allowed": ["返回已登记项目的唯一或候选路由"], "forbidden": ["猜测未登记项目的科室或设备", "把路由解析视为已经完成运输"], "requires_confirmation": ["存在多个候选设备或项目无法解析时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["test_request"], "produces": ["test_route_assignment"] }, "routing_registry": "pending" }
+    },
+    {
+      "id": "lab.meta.confirm_sample_handoff", "version": "1.0.0", "name": "样品交接确认接口", "category": "lab",
+      "description": "记录客户送样或检测人员领样的外部确认结果，作为后续自动流程的边界条件。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "样品采集、接收与检测流程（用户提供材料）", "sections": ["样品采集与接收", "客户送样", "检测人员领取样品"] },
+      "inputs": { "type": "object", "required": ["sample_id", "handoff_type", "external_confirmation"], "properties": { "sample_id": { "type": "string" }, "handoff_type": { "type": "string", "enum": ["customer_delivery", "laboratory_pickup"] }, "external_confirmation": { "type": "boolean" }, "confirmed_by_ref": { "type": "string" }, "confirmed_at": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["handoff_confirmed"], "properties": { "handoff_confirmed": { "type": "boolean" }, "handoff_record_id": { "type": "string" } } },
+      "input_hint": "样品、交接类型和外部人员或上游系统确认", "output_hint": "可供自动流程引用的交接确认记录", "precondition_refs": [],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "handoff_01", "type": "atomic_node", "node_ref": "human.sample_handoff.confirm", "name": "接收外部交接确认", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "handoff_02", "type": "atomic_node", "node_ref": "sample.handoff.store", "name": "保存交接记录", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["handoff_01"] },
+        { "instance_id": "handoff_03", "type": "atomic_node", "node_ref": "sample.handoff.publish", "name": "发布交接状态", "source_type": "software_interface", "execution_policy": "agent_allowed", "depends_on": ["handoff_02"] }
+      ] },
+      "physical_requirements": ["外部人员或上游系统能够提供明确确认"], "capability_boundary": { "allowed": ["记录和转发外部确认结果"], "forbidden": ["Agent自行确认客户送样或人员领样", "缺少外部确认时继续自动流程"], "requires_confirmation": ["交接身份、时间或样品编号不一致时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] },
+      "extensions": { "planner_contract": { "consumes": ["external_handoff_confirmation"], "produces": ["sample_handoff"] }, "actor_boundary": "human_or_upstream_system" }
+    }
+  ]
+}

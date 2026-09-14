@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autolab.local/schemas/spatial-location-library.schema.json",
+  "title": "AutoLab Spatial Location Library",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "map_id", "coordinate_frame", "building", "locations", "transport_links", "execution_boundary"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "map_id": { "type": "string", "minLength": 1 },
+    "coordinate_frame": {
+      "type": "object",
+      "required": ["frame_id", "unit", "orientation_unit"],
+      "properties": {
+        "frame_id": { "type": "string" },
+        "unit": { "const": "m" },
+        "orientation_unit": { "const": "degree" },
+        "origin": { "$ref": "#/$defs/point" },
+        "origin_description": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "building": {
+      "type": "object",
+      "required": ["floor_count", "floor_height_m", "floor_height_status", "floor_elevations_m"],
+      "properties": {
+        "floor_count": { "type": "integer", "minimum": 1 },
+        "floor_height_m": { "type": "number", "exclusiveMinimum": 0 },
+        "floor_height_status": { "enum": ["placeholder", "verified"] },
+        "floor_elevations_m": { "type": "object" },
+        "notes": { "type": "string" }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "floor", "room", "pose", "status", "placeholder", "replace_before_execution"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "floor": { "type": "string" },
+          "room": { "type": "string" },
+          "device_id": { "type": "string" },
+          "support_location_id": { "type": "string" },
+          "pose": { "$ref": "#/$defs/pose" },
+          "pose_reference": { "type": "string" },
+          "approach_pose": { "$ref": "#/$defs/pose" },
+          "geometry": { "type": "object" },
+          "source_measurement": { "type": "object" },
+          "tolerance": { "type": "object" },
+          "status": { "enum": ["placeholder", "pending_calibration", "verified", "disabled"] },
+          "placeholder": { "type": "boolean" },
+          "replace_before_execution": { "type": "boolean" },
+          "data_source": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "transport_links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "from_location_id", "to_location_id", "status", "execution_policy"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "vehicle_type": { "type": "string" },
+          "from_location_id": { "type": "string" },
+          "to_location_id": { "type": "string" },
+          "waypoints": { "type": "array", "items": { "type": "string" } },
+          "status": { "enum": ["placeholder", "pending_calibration", "verified", "disabled"] },
+          "execution_policy": { "type": "string" },
+          "required_interfaces": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "execution_boundary": { "type": "object" }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "required": ["x", "y", "z", "roll", "pitch", "yaw"],
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" },
+        "roll": { "type": "number" }, "pitch": { "type": "number" }, "yaw": { "type": "number" }
+      }
+    }
+  }
+}

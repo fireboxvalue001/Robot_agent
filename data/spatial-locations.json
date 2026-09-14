@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.1.0",
+  "map_id": "autolab.multifloor_building",
+  "coordinate_frame": {
+    "frame_id": "building_floor1_corner",
+    "unit": "m",
+    "orientation_unit": "degree",
+    "origin": { "x": 0, "y": 0, "z": 0 },
+    "origin_description": "一楼选定墙角为全楼统一坐标原点，X/Y沿一楼墙面正方向，Z轴竖直向上。",
+    "description": "所有厘米输入均换算为米；跨楼层位置使用同一建筑坐标系。"
+  },
+  "building": {
+    "floor_count": 3,
+    "floor_height_m": 3.6,
+    "floor_height_status": "placeholder",
+    "floor_elevations_m": { "1楼": 0, "2楼": 3.6, "3楼": 7.2 },
+    "notes": "建筑至少包含1至3楼。楼层高度暂定3.6m，待现场测量后统一更新。"
+  },
+  "locations": [
+    {
+      "id": "lab.location.sample_checkin_station",
+      "name": "一楼送检样品检录工作台",
+      "type": "sample_checkin_workbench",
+      "floor": "1楼",
+      "room": "样品接收区",
+      "pose": { "x": 1.025, "y": 2.93, "z": 0, "roll": 0, "pitch": 0, "yaw": 0 },
+      "pose_reference": "工作台左下角落地点",
+      "approach_pose": { "x": 1.9, "y": 2.43, "z": 0, "roll": 0, "pitch": 0, "yaw": 90 },
+      "geometry": { "length_m": 1.75, "width_m": 0.75, "height_m": 0.763, "work_surface_z_m": 0.763 },
+      "source_measurement": { "position_cm": [102.5, 293], "dimensions_cm": [175, 75, 76.3] },
+      "tolerance": { "position_m": 0.05, "orientation_degree": 5 },
+      "status": "pending_calibration",
+      "placeholder": false,
+      "replace_before_execution": true,
+      "data_source": "user_provided",
+      "notes": "位置和尺寸由用户提供，默认单位按厘米解释；坐标方向和机器人接近位姿仍需现场标定。"
+    },
+    {
+      "id": "lab.location.elevator_lobby_floor1",
+      "name": "一楼电梯候梯与进梯点",
+      "type": "elevator_stop",
+      "floor": "1楼",
+      "room": "一楼电梯厅",
+      "pose": { "x": 8, "y": 1.5, "z": 0, "roll": 0, "pitch": 0, "yaw": 0 },
+      "pose_reference": "小车候梯中心点",
+      "approach_pose": { "x": 7.2, "y": 1.5, "z": 0, "roll": 0, "pitch": 0, "yaw": 0 },
+      "tolerance": { "position_m": 0.1, "orientation_degree": 10 },
+      "status": "placeholder",
+      "placeholder": true,
+      "replace_before_execution": true,
+      "data_source": "assumed_for_simulation",
+      "notes": "坐标暂定，等待电梯门中心、候梯点、轿厢停靠点和通信接口标定。"
+    },
+    {
+      "id": "lab.location.elevator_lobby_floor3",
+      "name": "三楼电梯出梯点",
+      "type": "elevator_stop",
+      "floor": "3楼",
+      "room": "三楼电梯厅",
+      "pose": { "x": 8, "y": 1.5, "z": 7.2, "roll": 0, "pitch": 0, "yaw": 0 },
+      "pose_reference": "小车出梯中心点",
+      "approach_pose": { "x": 7.2, "y": 1.5, "z": 7.2, "roll": 0, "pitch": 0, "yaw": 180 },
+      "tolerance": { "position_m": 0.1, "orientation_degree": 10 },
+      "status": "placeholder",
+      "placeholder": true,
+      "replace_before_execution": true,
+      "data_source": "assumed_for_simulation",
+      "notes": "XY暂按一楼电梯投影一致，Z按暂定楼层高度计算。"
+    },
+    {
+      "id": "lab.location.vd10_support_table",
+      "name": "三楼VD10支撑桌",
+      "type": "instrument_support_table",
+      "floor": "3楼",
+      "room": "三楼仪器检测区",
+      "pose": { "x": 4.5, "y": 2, "z": 7.2, "roll": 0, "pitch": 0, "yaw": 0 },
+      "pose_reference": "支撑桌左下角落地点",
+      "geometry": { "length_m": 0.76, "width_m": 0.63, "height_m": 0.7, "work_surface_z_m": 7.9 },
+      "source_measurement": { "dimensions_cm": [76, 63, 70] },
+      "tolerance": { "position_m": 0.03, "orientation_degree": 3 },
+      "status": "placeholder",
+      "placeholder": true,
+      "replace_before_execution": true,
+      "data_source": "mixed_user_dimensions_assumed_position",
+      "notes": "桌体尺寸由用户提供；三楼平面坐标暂定，等待现场测量。"
+    },
+    {
+      "id": "lab.location.vd10_station",
+      "name": "三楼VD10检测工位",
+      "type": "instrument_station",
+      "floor": "3楼",
+      "room": "三楼仪器检测区",
+      "device_id": "vd10",
+      "support_location_id": "lab.location.vd10_support_table",
+      "pose": { "x": 4.88, "y": 2.315, "z": 7.9, "roll": 0, "pitch": 0, "yaw": 180 },
+      "pose_reference": "VD10在支撑桌台面上的暂定中心点",
+      "approach_pose": { "x": 4.88, "y": 1.2, "z": 7.2, "roll": 0, "pitch": 0, "yaw": 90 },
+      "tolerance": { "position_m": 0.03, "orientation_degree": 3 },
+      "status": "placeholder",
+      "placeholder": true,
+      "replace_before_execution": true,
+      "data_source": "assumed_for_simulation",
+      "notes": "VD10位于三楼支撑桌上；精确坐标、设备外形、装载口和操作面朝向待定。"
+    }
+  ],
+  "transport_links": [
+    {
+      "id": "lab.transport.elevator_floor1_to_floor3",
+      "name": "小车一楼至三楼电梯运输",
+      "type": "elevator",
+      "vehicle_type": "sample_cart_or_agv",
+      "from_location_id": "lab.location.elevator_lobby_floor1",
+      "to_location_id": "lab.location.elevator_lobby_floor3",
+      "waypoints": [
+        "lab.location.sample_checkin_station",
+        "lab.location.elevator_lobby_floor1",
+        "lab.location.elevator_lobby_floor3",
+        "lab.location.vd10_station"
+      ],
+      "status": "placeholder",
+      "execution_policy": "interface_only",
+      "required_interfaces": ["elevator.call", "elevator.door_state", "elevator.floor_state", "agv.elevator_entry_exit"],
+      "notes": "用于模拟样品小车从一楼检录台经电梯到三楼VD10工位；全部电梯接口和路径待验证。"
+    }
+  ],
+  "execution_boundary": {
+    "simulation_allowed": true,
+    "physical_execution_allowed": false,
+    "blocking_reason": "楼层高度、VD10坐标、电梯坐标和跨楼层路径尚未完成现场标定。"
+  }
+}
