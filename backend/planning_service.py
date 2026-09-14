@@ -32,12 +32,19 @@ def _number(value: str) -> int:
 
 def _duration_seconds(text: str, prefix: str) -> int | None:
     match = re.search(
-        rf"(?:{prefix})(?:时间为|持续|保持|约)?\s*(\d+(?:\.\d+)?)\s*(秒|分钟|小时)",
+        rf"(?:{prefix})(?:时间为|持续|保持|约)?\s*(\d+(?:\.\d+)?)\s*(秒钟?|分钟|小时|secs?|seconds?|mins?|minutes?|hrs?|hours?|s|h)",
         text,
+        re.IGNORECASE,
     )
     if not match:
         return None
-    multiplier = {"秒": 1, "分钟": 60, "小时": 3600}[match.group(2)]
+    unit = match.group(2).lower()
+    if unit in {"分钟", "min", "mins", "minute", "minutes"}:
+        multiplier = 60
+    elif unit in {"小时", "h", "hr", "hrs", "hour", "hours"}:
+        multiplier = 3600
+    else:
+        multiplier = 1
     return round(float(match.group(1)) * multiplier)
 
 
@@ -76,9 +83,12 @@ def parse_natural_language(text: str) -> dict[str, Any]:
     mentions_test = bool(re.search(r"检测|测试|分析", text)) and (
         explicit_test_action or not mentions_result
     )
-    mentions_heating = bool(re.search(r"加热|升温|恒温", text))
+    test_keyword_match = re.search(r"检测|测试|分析", text)
+    heating_match = re.search(r"加热|升温|恒温", text)
+    mentions_heating = bool(heating_match)
     mixing_match = re.search(r"摇匀|混匀|震荡|振荡", text)
     hold_match = re.search(r"静置", text)
+    container_match = re.search(r"(?:使用|采用|装入|放入|盛装(?:于|到)?)[^，。；]*(试管|烧杯|样品瓶|离心管)", text)
 
     temperature_match = re.search(
         r"(?:温度(?:为|设为|设置为|到|至)?|加热(?:到|至))\s*(\d+(?:\.\d+)?)\s*(?:°C|℃|度|°)",
@@ -118,6 +128,8 @@ def parse_natural_language(text: str) -> dict[str, Any]:
         parameters["mixing_requirement"] = _typed(mixing_match.group(0))
     elif hold_match:
         parameters["mixing_requirement"] = _typed("静置")
+    if container_match:
+        parameters["instrument_requirement"] = _typed(container_match.group(1))
     if heating_duration:
         parameters["process_duration_seconds"] = _typed(heating_duration, "s")
     if mixing_duration:
@@ -162,6 +174,10 @@ def parse_natural_language(text: str) -> dict[str, Any]:
             "mentions_heating": mentions_heating,
             "mixing_method": mixing_match.group(0) if mixing_match else None,
             "hold_requested": bool(hold_match),
+            "test_position": test_keyword_match.start() if test_keyword_match else -1,
+            "heating_position": heating_match.start() if heating_match else -1,
+            "mixing_position": mixing_match.start() if mixing_match else -1,
+            "hold_position": hold_match.start() if hold_match else -1,
             "temperature_c": temperature_c,
             "heating_duration": heating_duration,
             "mixing_duration": mixing_duration,
@@ -206,7 +222,7 @@ def plan_natural_language(text: str, workflow_id: str | None = None) -> dict[str
 
     processing: list[tuple[int, str, dict[str, Any]]] = []
     if facts["mentions_heating"]:
-        processing.append((clean_text.find("加热"), "robot.meta.heat_sample", {
+        processing.append((facts["heating_position"], "robot.meta.heat_sample", {
             "sample_id": "sample_pending_identification",
             "heater_id": "heater_pending_binding",
             "temperature_c": facts["temperature_c"],
@@ -218,7 +234,7 @@ def plan_natural_language(text: str, workflow_id: str | None = None) -> dict[str
         method = "vortex" if facts["mixing_method"] in {"震荡", "振荡"} else (
             "mix" if facts["mixing_method"] == "混匀" else "shake"
         )
-        processing.append((clean_text.find(facts["mixing_method"]), "robot.meta.mix_sample", {
+        processing.append((facts["mixing_position"], "robot.meta.mix_sample", {
             "sample_id": "sample_pending_identification",
             "mixer_id": "mixer_pending_binding",
             "method": method,
@@ -228,12 +244,18 @@ def plan_natural_language(text: str, workflow_id: str | None = None) -> dict[str
         }))
         warnings.append("混匀设备及未明确的运行参数需要在物理执行前确认。")
     if facts["hold_requested"]:
-        processing.append((clean_text.find("静置"), "robot.meta.hold_sample", {
+        processing.append((facts["hold_position"], "robot.meta.hold_sample", {
             "sample_id": "sample_pending_identification",
             "location_id": DEFAULT_CHECKIN_LOCATION,
             "duration_seconds": facts["hold_duration"],
         }))
-    for _, operation_id, arguments in sorted(processing, key=lambda item: item[0]):
+    processing.sort(key=lambda item: item[0])
+    post_test_processing = [
+        item for item in processing
+        if facts["mentions_test"] and item[0] > facts["test_position"] >= 0
+    ]
+    pre_test_processing = [item for item in processing if item not in post_test_processing]
+    for _, operation_id, arguments in pre_test_processing:
         select(operation_id, arguments)
 
     if facts["mentions_sample"] and facts["mentions_delivery"]:
@@ -274,6 +296,9 @@ def plan_natural_language(text: str, workflow_id: str | None = None) -> dict[str
     elif facts["mentions_result"]:
         select("vd10.meta.query_test_results", {"sample_id": "sample_pending_identification"})
         select("robot.meta.read_result_from_screen", {"device_id": "vd10" if facts["mentions_vd10"] else "instrument_pending_assignment"})
+
+    for _, operation_id, arguments in post_test_processing:
+        select(operation_id, arguments)
 
     if facts["destination_floor"] and facts["floor_after_test"]:
         select("lab.meta.cross_zone_transport", {

@@ -62,6 +62,28 @@ class NaturalLanguagePlanningTests(unittest.TestCase):
             "2楼",
         )
 
+    def test_english_second_unit_and_post_test_hold_are_preserved(self):
+        result = plan_natural_language(
+            "将桌上的样品分成4份，每份25ml，分别送到VD10仪器中进行检测。"
+            "检测完成后静置30s，然后装入试管中"
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertFalse(result["preprocessing"]["clarification"]["needed"])
+        self.assertEqual(
+            result["preprocessing"]["parameters"]["hold_duration_seconds"]["value"],
+            30,
+        )
+        self.assertEqual(
+            result["preprocessing"]["parameters"]["instrument_requirement"]["value"],
+            "试管",
+        )
+        ids = operation_ids(result)
+        self.assertGreater(
+            ids.index("robot.meta.hold_sample"),
+            ids.index("robot.meta.read_result_from_screen"),
+        )
+
     def test_missing_required_physical_parameter_returns_failed_contract(self):
         result = plan_natural_language("将样品分成4份后送去检测")
         self.assertEqual(result["status"], "failed")

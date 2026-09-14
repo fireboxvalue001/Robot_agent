@@ -558,12 +558,12 @@ function buildLocalPreprocessing(text) {
   if (temperatureMatch) {
     parameters.temperature_c = { type: "number", value: Number(temperatureMatch[1]), unit: "°C" };
   }
-  const processDurationMatch = text.match(/(?:持续|保持)\s*(\d+(?:\.\d+)?)\s*(秒|分钟|小时)/);
+  const processDurationMatch = text.match(/(?:持续|保持)\s*(\d+(?:\.\d+)?)\s*(秒钟?|分钟|小时|secs?|seconds?|mins?|minutes?|hrs?|hours?|s|h)/i);
   if (processDurationMatch) {
     const seconds = durationToSeconds(processDurationMatch[1], processDurationMatch[2]);
     parameters.process_duration_seconds = { type: "number", value: seconds, unit: "s" };
   }
-  const holdDurationMatch = text.match(/静置(?:时间为|持续|保持)?\s*(\d+(?:\.\d+)?)\s*(秒|分钟|小时)/);
+  const holdDurationMatch = text.match(/静置(?:时间为|持续|保持)?\s*(\d+(?:\.\d+)?)\s*(秒钟?|分钟|小时|secs?|seconds?|mins?|minutes?|hrs?|hours?|s|h)/i);
   if (holdDurationMatch) {
     parameters.hold_duration_seconds = {
       type: "number",
@@ -571,7 +571,7 @@ function buildLocalPreprocessing(text) {
       unit: "s"
     };
   }
-  const mixingDurationMatch = text.match(/(?:摇匀|混匀|震荡|振荡)(?:时间为|持续|保持)?\s*(\d+(?:\.\d+)?)\s*(秒|分钟|小时)/);
+  const mixingDurationMatch = text.match(/(?:摇匀|混匀|震荡|振荡)(?:时间为|持续|保持)?\s*(\d+(?:\.\d+)?)\s*(秒钟?|分钟|小时|secs?|seconds?|mins?|minutes?|hrs?|hours?|s|h)/i);
   if (mixingDurationMatch) {
     parameters.mixing_duration_seconds = {
       type: "number",
@@ -616,8 +616,11 @@ function buildLocalPreprocessing(text) {
 }
 
 function durationToSeconds(value, unit) {
-  const multipliers = { 秒: 1, 分钟: 60, 小时: 3600 };
-  return Math.round(Number(value) * (multipliers[unit] || 1));
+  const normalized = String(unit).toLowerCase();
+  const multiplier = ["分钟", "min", "mins", "minute", "minutes"].includes(normalized)
+    ? 60
+    : (["小时", "h", "hr", "hrs", "hour", "hours"].includes(normalized) ? 3600 : 1);
+  return Math.round(Number(value) * multiplier);
 }
 
 function semanticValue(...keys) {
@@ -972,7 +975,7 @@ function parseIntent(rawText, semanticMessage = null) {
   const mixingRequirement = String(semanticValue("mixing_requirement") || "");
   const mentionsMixing = /摇匀|混匀|震荡|振荡/.test(mixingRequirement);
   const holdDurationSeconds = Number(semanticValue("hold_duration_seconds"));
-  const textDurationMatch = text.match(/(?:持续|保持)\s*(\d+(?:\.\d+)?)\s*(秒|分钟|小时)/);
+  const textDurationMatch = text.match(/(?:持续|保持)\s*(\d+(?:\.\d+)?)\s*(秒钟?|分钟|小时|secs?|seconds?|mins?|minutes?|hrs?|hours?|s|h)/i);
   const semanticProcessDuration = semanticValue("process_duration_seconds", "heating_duration_seconds");
   const processDurationSeconds = semanticProcessDuration !== null
     ? Number(semanticProcessDuration)

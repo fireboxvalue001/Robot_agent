@@ -89,6 +89,8 @@ MQTT_HISTORY_DIR=
 
 可选传入以 `wf_` 开头的 `workflowId`。成功响应直接使用现有 `planner_result` 字段和 `operationChain` 契约，并额外携带 `preprocessing` 供界面展示。缺少分装体积、加热温度或静置时长时返回 `status=failed` 和澄清问题；无法匹配能力时不会强制路由到设备。
 
+时间参数支持中文单位“秒、分钟、小时”和常见缩写 `s`、`sec`、`min`、`h`。编排器会根据文字位置区分检测前处理与“检测完成后”的后处理。
+
 当前已接收 `autolab/planner/result` 和 `autolab/physical/validation`。真实MQTT预处理结果不会再触发本地关键词编排：界面等待同事B返回带元操作ID的 `operationChain`，再等待物理校验模块返回逐步结论。详细契约见 `docs/MODULE_INTERFACE_HANDOFF.md`。
 
 发送和接收记录会按日期追加到 `data/mqtt_history/*.jsonl`。服务重启后仍可通过界面的“查看通信历史”读取最近记录，也可以按 `workflowId` 调用只读历史接口查询。
