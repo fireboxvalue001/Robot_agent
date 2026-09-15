@@ -127,6 +127,32 @@ class MqttBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "end must not precede"):
             service.publish_ui_input("无效时间", asr_timing=timing)
 
+    def test_asr_timing_accepts_optional_sentence_and_word_details(self):
+        timing = {
+            "utteranceStartedAt": 1789196371200,
+            "utteranceEndedAt": 1789196372600,
+            "recognitionCompletedAt": 1789196372800,
+            "audioDurationMs": 1400,
+            "timeUnit": "unix_ms",
+            "serviceStartedAt": 1789196370000,
+            "streamStartedAt": 1789196370100,
+            "sentences": [{
+                "sentenceId": "utt_001", "index": 0,
+                "text": "将样品送到VD10。",
+                "startedAt": 1789196371200,
+                "endedAt": 1789196372600,
+                "words": [{
+                    "text": "样品", "startedAt": 1789196371450,
+                    "endedAt": 1789196371810,
+                }],
+            }],
+        }
+
+        service = self.make_service()
+        record = service.publish_ui_input("将样品送到VD10。", asr_timing=timing)
+
+        self.assertEqual(record["ui_input"]["asrTiming"], timing)
+
     def test_invalid_semantic_payload_is_rejected_without_transformation(self):
         self.assertEqual(validate_semantic_message({"type": "semantic_params"}).split(":")[0], "missing_fields")
 

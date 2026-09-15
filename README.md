@@ -18,7 +18,10 @@ cd D:\ResearchGroupProject\OCR_agent\robot_agent\VD10\vd10_visual_workflow_hando
 ```text
 TENCENTCLOUD_SECRET_ID=你的SecretId
 TENCENTCLOUD_SECRET_KEY=你的SecretKey
+TENCENTCLOUD_APP_ID=你的腾讯云AppId
 TENCENT_ASR_ENGINE=16k_zh
+TENCENT_ASR_WORD_INFO=1
+TENCENT_ASR_VAD_SILENCE_TIME=800
 ```
 
 MQTT 默认使用上游示例 Broker。需要覆盖连接参数时，在同一个 `backend/.env` 中填写：
@@ -69,9 +72,9 @@ MQTT_HISTORY_DIR=
 
 ## 语音输入
 
-第一部分支持浏览器麦克风录音。前端把音频转换为 16kHz 单声道 WAV，上传到同源的 `/api/asr/transcribe`。腾讯云返回的文字会填入总体意图输入框，用户确认或修改后再发送语义处理。
+第一部分支持浏览器麦克风录音。配置 AppId 后，前端通过同源的 `/api/asr/realtime` WebSocket 将 16kHz 单声道 PCM 音频流发送给后端，由后端代理到腾讯云。点击开始只启动服务，腾讯 VAD 检测到人声后才记录句子开始时间；每次静音断句都会更新文字，并保留逐句、逐词的起止时间。点击停止后才结束整个会话。
 
-最长录音时间为 30 秒，后端最大接收 3MB。密钥只由 Python 后端读取，不会返回到浏览器。需要允许浏览器访问麦克风。
+未配置 AppId 时自动回退到 `/api/asr/transcribe` 一句话识别，最长录音30秒。两种模式下密钥都只由 Python 后端读取，不会返回浏览器；需要允许浏览器访问麦克风。
 
 ## MQTT语义处理
 
@@ -114,7 +117,7 @@ MQTT_HISTORY_DIR=
 
 元操作仍分为绿色检测仪器、蓝色机器人和红色实验室环境三类。机械臂与 AGV 元操作来自 `机器人操作（机械臂部分）.docx`，不保存负责人信息；尚未完成实机验证的能力会显示“草案”或“待实机验证”。
 
-语音只负责转成可编辑文字，不会自动执行设备。通过语音转写发送 MQTT 时，`ui_input` 会携带可选的 `asrTiming`，记录录音开始、录音结束、识别完成和录音时长；手动输入或修改过的转写文字不携带该字段。修改已预处理的文字会使旧结果失效，再点击“生成实验流程”会改用当前文字重新进行本地预处理；也可以重新发送 MQTT 语义处理获得上游结果。模拟执行不会生成虚假的 VD10 测量值，真实数据接入前显示为等待回传。
+语音只负责转成可编辑文字，不会自动执行设备。配置 `TENCENTCLOUD_APP_ID` 后使用腾讯云实时 ASR：点击开始只启动麦克风和实时识别服务，界面先显示“等待说话”；腾讯 VAD 检测到人声后才产生 `utteranceStartedAt`，静音断句后返回句级和词级时间戳。未配置 AppId 时自动使用原有30秒一句话识别兼容模式。通过语音转写发送 MQTT 时，`ui_input` 会携带可选的 `asrTiming`；原有摘要字段保持不变，实时模式额外携带 `serviceStartedAt`、`streamStartedAt` 和 `sentences`。手动输入或修改过的转写文字不携带该字段。修改已预处理的文字会使旧结果失效，再点击“生成实验流程”会改用当前文字重新进行本地预处理；也可以重新发送 MQTT 语义处理获得上游结果。模拟执行不会生成虚假的 VD10 测量值，真实数据接入前显示为等待回传。
 
 ## 测试
 

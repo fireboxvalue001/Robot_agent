@@ -9,8 +9,8 @@
     "frontend_dependencies": [],
     "local_server": "FastAPI and Uvicorn",
     "python_environment": ".venv",
-    "asr_provider": "Tencent Cloud SentenceRecognition",
-    "browser_audio_format": "16kHz mono PCM WAV",
+    "asr_provider": "Tencent Cloud realtime WebSocket ASR with SentenceRecognition fallback",
+    "browser_audio_format": "16kHz mono PCM stream; WAV in fallback mode",
     "mqtt_client": "paho-mqtt",
     "mqtt_topics": [
       "autolab/ui/input",

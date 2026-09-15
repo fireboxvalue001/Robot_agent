@@ -49,10 +49,13 @@
 }
 ```
 
-- `utteranceStartedAt`：浏览器开始采集本次录音的Unix毫秒时间。
+- `utteranceStartedAt`：检测到本次有效人声开始的Unix毫秒时间；实时模式由腾讯ASR返回的音频偏移换算得到。
 - `utteranceEndedAt`：用户停止录音或达到最长录音时长的Unix毫秒时间。
 - `recognitionCompletedAt`：浏览器收到腾讯云识别结果的Unix毫秒时间。
 - `audioDurationMs`：`utteranceEndedAt - utteranceStartedAt`。
+- `serviceStartedAt`：可选，用户点击开始并启动语音服务的时间，不代表已经开始说话。
+- `streamStartedAt`：可选，实时PCM音频流的时间基准。
+- `sentences`：可选，实时ASR返回的逐句结果；每句可包含 `startedAt`、`endedAt` 和带起止时间的 `words`。
 - 原有 `timestamp`：MQTT消息生成和发送时间，语义不变。
 
 如果用户修改转写文字，前端会清除该次ASR时间信息，按手动文字发送，避免时间与文本错配。两台联调设备必须使用同一NTP时间源；Unix时间戳本身不会自动校准设备时钟。

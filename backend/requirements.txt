@@ -4,3 +4,4 @@ python-dotenv==1.0.1
 python-multipart==0.0.20
 tencentcloud-sdk-python>=3.0.0
 uvicorn==0.34.0
+websockets>=13.1,<16.0

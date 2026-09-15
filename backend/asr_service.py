@@ -32,6 +32,8 @@ class TranscriptionResult:
     request_id: str
     elapsed_ms: int
     voice_format: str
+    audio_duration_ms: int
+    words: list[dict]
 
 
 def detect_voice_format(filename: str, content: bytes) -> str:
@@ -85,6 +87,7 @@ def transcribe_with_tencent_cloud(content: bytes, filename: str) -> Transcriptio
         "DataLen": len(content),
         "FilterPunc": 0,
         "ConvertNumMode": 1,
+        "WordInfo": 1,
     }
 
     try:
@@ -113,4 +116,14 @@ def transcribe_with_tencent_cloud(content: bytes, filename: str) -> Transcriptio
         request_id=str(payload.get("RequestId", "")),
         elapsed_ms=round((time.perf_counter() - started_at) * 1000),
         voice_format=voice_format,
+        audio_duration_ms=int(payload.get("AudioDuration") or 0),
+        words=[
+            {
+                "text": str(item.get("Word", "")),
+                "startOffsetMs": int(item.get("StartTime") or 0),
+                "endOffsetMs": int(item.get("EndTime") or 0),
+            }
+            for item in (payload.get("WordList") or [])
+            if isinstance(item, dict) and item.get("Word")
+        ],
     )
