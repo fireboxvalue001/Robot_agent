@@ -1,0 +1,14 @@
+{
+  "scenario_id": "vd10_single_sample_demo",
+  "knowledge_mode": "demo",
+  "model_mode": "deterministic",
+  "workflow_id": "wf_planner_demo_001",
+  "text": "将已交接样品送入VD10检测并读取结果",
+  "parameters": {
+    "sample_id": "sample-001",
+    "handoff_confirmed": true,
+    "operator": "tester"
+  },
+  "read_results": true,
+  "measurement_repeats": 1
+}

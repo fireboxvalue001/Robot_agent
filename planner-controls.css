@@ -1,0 +1,57 @@
+.planner-mode-label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin: 5px 0 3px;
+}
+
+.planner-mode-select,
+.planner-request-settings input[type="text"] {
+  width: 100%;
+  background: #0b0e14;
+  border: 1px solid #3a4351;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px;
+}
+
+.planner-request-settings {
+  width: 230px;
+  border: 1px solid #2f3948;
+  border-radius: 7px;
+  background: #0d1118;
+  color: #aebbd0;
+  font-size: 11px;
+}
+
+.planner-request-settings summary {
+  cursor: pointer;
+  padding: 7px 9px;
+  color: #bcd0ff;
+}
+
+.planner-request-settings > label {
+  display: block;
+  padding: 5px 9px;
+}
+
+.planner-request-settings input[type="text"] {
+  margin-top: 3px;
+}
+
+.planner-request-settings .planner-check {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.planner-request-settings .planner-check input {
+  margin-top: 2px;
+}
+
+@media (max-width: 760px) {
+  .planner-request-settings {
+    width: 100%;
+    margin-top: 10px;
+  }
+}

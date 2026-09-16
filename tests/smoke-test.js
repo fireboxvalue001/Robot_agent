@@ -17,6 +17,7 @@ function makeElement(id) {
     innerHTML: "",
     textContent: "",
     hidden: false,
+    checked: false,
     dataset: {},
     listeners: {},
     className: "",
@@ -29,7 +30,9 @@ function makeElement(id) {
   "parse-intent", "intent-input", "clear-flow", "library-search", "simulate-execution",
   "operation-count", "operation-library", "semantic-flow", "physical-flow",
   "semantic-state", "physical-state", "intent-summary", "intent-state",
-  "tab-status", "tab-results", "toast", "spatial-location-count", "spatial-location-list"
+  "tab-status", "tab-results", "toast", "spatial-location-count", "spatial-location-list",
+  "planner-mode", "planner-sample-id", "planner-operator",
+  "planner-handoff-confirmed", "planner-read-results"
 ].forEach((id) => elements.set(id, makeElement(id)));
 
 global.document = {
@@ -57,7 +60,55 @@ global.CustomEvent = class CustomEvent {
   }
 };
 
-global.fetch = async (resource) => {
+global.fetch = async (resource, options = {}) => {
+  if (String(resource).includes("/api/planner/plan")) {
+    const request = JSON.parse(options.body || "{}");
+    const operationIds = request.read_results === false
+      ? [
+          "robot.meta.receive_and_register_sample",
+          "vd10.meta.prepare_test",
+          "vd10.meta.sample_test"
+        ]
+      : [
+          "robot.meta.receive_and_register_sample",
+          "vd10.meta.prepare_test",
+          "vd10.meta.sample_test",
+          "vd10.meta.query_test_results",
+          "robot.meta.read_result_from_screen"
+        ];
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        schema_version: "0.2.0",
+        plan_id: "plan_ui-test",
+        workflow_id: request.workflow_id,
+        status: "logical_pass",
+        physical_status: "not_evaluated",
+        execution_allowed: false,
+        knowledge: {
+          source_library_id: "autolab.vd10.meta_operations",
+          source_library_version: "1.3.0",
+          sha256: "test"
+        },
+        steps: operationIds.map((operationId, index) => ({
+          step_id: `smart_${index + 1}`,
+          operation_id: operationId,
+          operation_version: "1.0.0",
+          parameters: operationId === "robot.meta.receive_and_register_sample"
+            ? { sample_id: request.parameters.sample_id, handoff_confirmed: true }
+            : {},
+          depends_on: index ? [`smart_${index}`] : []
+        })),
+        issues: [{ code: "LOGICAL_ONLY", message: "logical only" }],
+        generation: {
+          runtime: request.model_mode === "deepseek" ? "deepseek_api" : "deterministic",
+          network_inference: request.model_mode === "deepseek",
+          order_repaired: false
+        }
+      })
+    };
+  }
   if (String(resource).includes("/api/v1/planning/from-text")) {
     return { ok: false, status: 503, json: async () => ({ detail: "test fallback" }) };
   }
@@ -294,6 +345,21 @@ setTimeout(async () => {
   assert(semantic.innerHTML.includes("机械臂物体点到点搬运"), "robot transfer intent should select physical displacement");
   assert(semantic.innerHTML.includes("lab.location.sample_checkin_station"), "transfer should use the check-in location id");
   assert(semantic.innerHTML.includes("lab.location.vd10_station"), "transfer should use the VD10 location id");
+
+  elements.get("planner-mode").value = "deterministic";
+  elements.get("planner-sample-id").value = "sample-ui-001";
+  elements.get("planner-handoff-confirmed").checked = true;
+  elements.get("planner-read-results").checked = true;
+  setIntent("将已交接样品送入VD10检测并读取结果");
+  await parseButton.listeners.click();
+  assert(semantic.innerHTML.includes("样品接收与信息登记"), "intelligent planning should render sample registration");
+  assert(semantic.innerHTML.includes("VD10测试信息准备"), "intelligent planning should render VD10 preparation");
+  assert(semantic.innerHTML.includes("VD10样品检测"), "intelligent planning should render VD10 testing");
+  assert(semantic.innerHTML.includes("VD10检测结果查询"), "intelligent planning should render result query");
+  assert(semantic.innerHTML.includes("非联网仪器屏幕数据读取"), "intelligent planning should render robot result reading");
+  assert(elements.get("physical-flow").innerHTML.includes("等待外部物理可执行确认"), "intelligent plans must wait for physical validation");
+  assert(elements.get("intent-summary").innerHTML.includes("模型运行时：deterministic"), "planner runtime should be visible");
+  elements.get("planner-mode").value = "rules";
 
   const externalText = "将样品分成2份送到VD10检测";
   setIntent(externalText);

@@ -1,0 +1,82 @@
+{
+  "knowledge_id": "autolab.planner.vd10_single_sample",
+  "version": "0.2.0",
+  "scenario_id": "vd10_single_sample_demo",
+  "review_status": "draft",
+  "scope": "已完成样品交接的单个样品，执行一次VD10检测并按需读取结果。",
+  "required_request_fields": [
+    "sample_id",
+    "handoff_confirmed"
+  ],
+  "boundaries": [
+    "只生成逻辑计划，不控制机械臂、AGV或VD10。",
+    "不推断样品交接状态，不生成检测结果。",
+    "当前场景不覆盖分装、预处理、跨楼层运输或重复检测。",
+    "所有物理前置条件由后续物理可执行确认模块处理。"
+  ],
+  "operations": [
+    {
+      "operation_id": "robot.meta.receive_and_register_sample",
+      "condition": "always",
+      "parameter_bindings": {
+        "sample_id": "sample_id",
+        "handoff_confirmed": "handoff_confirmed"
+      }
+    },
+    {
+      "operation_id": "vd10.meta.prepare_test",
+      "condition": "always",
+      "parameter_bindings": {
+        "sample_id": "sample_id",
+        "operator": "operator"
+      }
+    },
+    {
+      "operation_id": "vd10.meta.sample_test",
+      "condition": "always",
+      "parameter_bindings": {
+        "sample_id": "sample_id"
+      }
+    },
+    {
+      "operation_id": "vd10.meta.query_test_results",
+      "condition": "read_results",
+      "parameter_bindings": {
+        "sample_id": "sample_id"
+      }
+    },
+    {
+      "operation_id": "robot.meta.read_result_from_screen",
+      "condition": "read_results",
+      "constant_bindings": {
+        "device_id": "vd10"
+      }
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "vd10.register_before_prepare",
+      "before": "robot.meta.receive_and_register_sample",
+      "after": "vd10.meta.prepare_test",
+      "basis": "样品交接与登记完成后才能填写VD10测试信息。"
+    },
+    {
+      "rule_id": "vd10.prepare_before_test",
+      "before": "vd10.meta.prepare_test",
+      "after": "vd10.meta.sample_test",
+      "basis": "VD10测试信息准备先于检测执行。"
+    },
+    {
+      "rule_id": "vd10.test_before_query",
+      "before": "vd10.meta.sample_test",
+      "after": "vd10.meta.query_test_results",
+      "basis": "本次检测结果只能在检测执行后查询。"
+    },
+    {
+      "rule_id": "vd10.query_before_read",
+      "before": "vd10.meta.query_test_results",
+      "after": "robot.meta.read_result_from_screen",
+      "basis": "机器人读取结果前，VD10必须已打开目标结果页面。"
+    }
+  ]
+}

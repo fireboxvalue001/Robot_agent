@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from .asr_service import detect_voice_format, transcribe_with_tencent_cloud
 from .mqtt_service import mqtt_service
 from .planning_service import plan_natural_language
+from .planner.router import planner_runtime_status, router as planner_router
 from .realtime_asr_service import (
     RealtimeAsrConfigurationError,
     build_realtime_asr_url,
@@ -33,7 +34,7 @@ META_OPERATION_LIBRARY = FRONTEND_DIR / "data" / "meta-operations.json"
 SPATIAL_LOCATION_LIBRARY = FRONTEND_DIR / "data" / "spatial-locations.json"
 PUBLIC_ASSETS = {
     "app.js", "index.html", "meta-operation.css", "mqtt-input.js",
-    "styles.css", "voice-input.js",
+    "planner-controls.css", "styles.css", "voice-input.js",
 }
 PUBLIC_DATA_FILES = {
     "meta-operations.json", "spatial-locations.json", "vd10_agent_only_operation_tree.json",
@@ -48,6 +49,7 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(title="VD10 Visual Workflow with ASR and MQTT", version="0.3.0", lifespan=lifespan)
+app.include_router(planner_router)
 
 
 class AsrTimingRequest(BaseModel):
@@ -103,6 +105,7 @@ def health_check() -> dict:
             "realtimeConfigured": realtime_asr_configured(),
         },
         "mqtt": mqtt_service.status(),
+        "planner": planner_runtime_status(),
     }
 
 

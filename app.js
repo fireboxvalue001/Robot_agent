@@ -711,28 +711,132 @@ async function generateWorkflowFromPreprocessing() {
   }
   if (localPlanningInProgress) return;
 
+  const plannerMode = $("planner-mode")?.value || "rules";
   localPlanningInProgress = true;
   $("parse-intent").disabled = true;
-  lastAnalysis = { matched: false, message: "正在通过自然语言编排接口生成流程...", factors: [] };
+  lastAnalysis = {
+    matched: false,
+    message: plannerMode === "rules"
+      ? "正在通过自然语言编排接口生成流程..."
+      : `正在通过${plannerMode === "deepseek" ? " DeepSeek" : "离线受限模式"}生成逻辑计划...`,
+    factors: []
+  };
   renderAll();
   try {
-    const response = await fetch("/api/v1/planning/from-text", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text })
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
-    if (result.preprocessing) {
-      receiveSemanticParameters(result.preprocessing, { type: "local_api" });
+    if (plannerMode === "rules") {
+      const response = await fetch("/api/v1/planning/from-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
+      if (result.preprocessing) {
+        receiveSemanticParameters(result.preprocessing, { type: "local_api" });
+      }
+      receivePlannerResult(result, "本地自然语言规则编排");
+    } else {
+      await generateIntelligentPlan(text, plannerMode);
     }
-    receivePlannerResult(result, "本地自然语言编排接口");
   } catch (error) {
-    showToast(`后端编排接口不可用，已切换到前端降级规则：${error.message || error}`);
-    generateWorkflowLocally();
+    if (plannerMode === "rules") {
+      showToast(`后端规则编排不可用，已切换到前端降级规则：${error.message || error}`);
+      generateWorkflowLocally();
+    } else {
+      workflow = [];
+      lastAnalysis = { matched: false, message: `智能规划请求失败：${error.message || error}`, factors: [] };
+      renderAll();
+      showToast(lastAnalysis.message);
+    }
   } finally {
     localPlanningInProgress = false;
     $("parse-intent").disabled = false;
+  }
+}
+
+async function generateIntelligentPlan(text, modelMode) {
+  const sampleId = String($("planner-sample-id")?.value || semanticValue("sample_id") || "").trim();
+  const handoffConfirmed = Boolean($("planner-handoff-confirmed")?.checked);
+  const operator = String($("planner-operator")?.value || semanticValue("operator") || "").trim();
+  const readResults = $("planner-read-results")?.checked !== false;
+  if (!sampleId) throw new Error("请在“智能规划参数”中填写样品编号");
+  if (!handoffConfirmed) throw new Error("请明确勾选“样品交接已确认”");
+
+  const currentSemanticMatches = latestSemanticMessage && !semanticResultStale &&
+    text === String(latestSemanticMessage.originalText || "").trim();
+  const workflowId = currentSemanticMatches && latestSemanticMessage.workflowId
+    ? latestSemanticMessage.workflowId
+    : `wf_ui_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const response = await fetch("/api/planner/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scenario_id: "vd10_single_sample_demo",
+      knowledge_mode: "demo",
+      model_mode: modelMode,
+      workflow_id: workflowId,
+      text,
+      parameters: {
+        sample_id: sampleId,
+        handoff_confirmed: handoffConfirmed,
+        operator: operator || null
+      },
+      read_results: readResults,
+      measurement_repeats: 1
+    })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
+
+  const issues = Array.isArray(result.issues) ? result.issues : [];
+  if (result.status !== "logical_pass") {
+    const message = issues.map((issue) => issue.message).filter(Boolean).join("；") ||
+      `规划未通过：${result.status || "unknown"}`;
+    receivePlannerResult({ status: "failed", warnings: [message] }, "智能逻辑规划接口");
+    return;
+  }
+
+  const steps = Array.isArray(result.steps) ? result.steps : [];
+  const normalized = {
+    type: "planner_result",
+    status: "success",
+    workflowId: result.workflow_id || workflowId,
+    operationChain: {
+      contractVersion: "1.0.0",
+      planId: result.plan_id,
+      capabilityLibrary: {
+        id: result.knowledge?.source_library_id,
+        version: result.knowledge?.source_library_version,
+        checksum: result.knowledge?.sha256 ? `sha256:${result.knowledge.sha256}` : ""
+      },
+      operations: steps.map((step, index) => ({
+        stepId: step.step_id,
+        sequence: index + 1,
+        metaOperationId: step.operation_id,
+        metaOperationVersion: step.operation_version,
+        arguments: step.parameters || {},
+        dependsOn: step.depends_on || []
+      }))
+    },
+    plannerMetadata: {
+      schemaVersion: result.schema_version,
+      modelRuntime: result.generation?.runtime,
+      model: result.generation?.model,
+      networkInference: result.generation?.network_inference,
+      orderRepaired: result.generation?.order_repaired,
+      physicalStatus: result.physical_status,
+      executionAllowed: result.execution_allowed,
+      issues
+    }
+  };
+  receivePlannerResult(
+    normalized,
+    modelMode === "deepseek" ? "DeepSeek智能逻辑规划" : "离线受限逻辑规划"
+  );
+  if (lastAnalysis?.matched) {
+    lastAnalysis.factors.push(`模型运行时：${result.generation?.runtime || modelMode}`);
+    lastAnalysis.factors.push(`物理状态：${result.physical_status || "not_evaluated"}`);
+    renderAll();
   }
 }
 
