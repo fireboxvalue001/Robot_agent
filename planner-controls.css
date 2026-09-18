@@ -49,6 +49,33 @@
   margin-top: 2px;
 }
 
+.button.document {
+  background: #6d4db2;
+}
+
+.button.document:hover {
+  background: #8060c8;
+}
+
+.document-intent-status {
+  display: block;
+  max-width: 230px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.document-intent-status.working {
+  color: var(--orange);
+}
+
+.document-intent-status.success {
+  color: var(--green);
+}
+
+.document-intent-status.error {
+  color: var(--red);
+}
+
 @media (max-width: 760px) {
   .planner-request-settings {
     width: 100%;

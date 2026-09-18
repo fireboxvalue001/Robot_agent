@@ -386,6 +386,18 @@ function bindStaticEvents() {
   window.addEventListener("autolab:semantic-params", (event) => {
     receiveSemanticParameters(event.detail, { type: "live" });
   });
+  window.addEventListener("autolab:document-intent", (event) => {
+    const semantic = event.detail?.semanticParams;
+    if (!semantic?.originalText) {
+      showToast("委托单识别结果缺少标准语义字段");
+      return;
+    }
+    $("intent-input").value = semantic.originalText;
+    receiveSemanticParameters(semantic, {
+      type: "document",
+      document_id: event.detail?.intent?.document_id || null
+    });
+  });
   window.addEventListener("autolab:planner-result", (event) => {
     receivePlannerResult(event.detail, "同事B通过MQTT返回");
   });
@@ -426,6 +438,7 @@ function receiveSemanticParameters(message, source = { type: "live" }) {
   else if (latestSemanticMessage.status === "failed") showToast("语义预处理失败，请查看 MQTT 返回结果");
   else if (latestSemanticMessage.clarification?.needed) showToast("预处理结果仍缺少必要字段，请补充后重新发送");
   else if (source.type === "local") showToast("已从自然语言提取本地预处理字段");
+  else if (source.type === "document") showToast("委托单字段已载入，请核对待确认项后再生成流程");
   else showToast("预处理字段已载入，可以生成实验流程");
 }
 
@@ -1494,6 +1507,7 @@ function renderIntentSummary() {
     history: "历史语义记录",
     local: "自然语言本地提取",
     local_api: "自然语言编排接口",
+    document: "委托单文档识别",
     live: "实时 MQTT 回包"
   };
   const sourceChips = latestSemanticMessage

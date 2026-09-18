@@ -1,0 +1,28 @@
+{
+  "knowledge_id": "autolab.document_intent.vd10_capability",
+  "version": "1.0.0",
+  "instrument": "VD10",
+  "description": "VD10是石油产品、溶剂和生物燃料自动蒸馏分析仪。",
+  "supported_test_patterns": [
+    "蒸馏",
+    "馏程",
+    "ASTM\\s*D86",
+    "GB[/\\s]*T\\s*6536"
+  ],
+  "unsupported_examples": [
+    "运动黏度",
+    "颗粒计数",
+    "FTIR",
+    "水分",
+    "酸值",
+    "铁谱",
+    "元素分析",
+    "击穿电压",
+    "介质损耗因数"
+  ],
+  "routing_policy": "Only assign VD10 when every requested test is within the supported patterns; otherwise require downstream routing confirmation.",
+  "source_refs": [
+    "VD10 manual v2.1 pages 1, 11, 13, 28 and 35"
+  ],
+  "review_status": "manual_grounded_not_standard_full_text"
+}

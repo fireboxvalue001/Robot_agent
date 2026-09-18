@@ -198,6 +198,28 @@ setTimeout(async () => {
   assert(elements.get("spatial-location-list").innerHTML.includes("三楼电梯出梯点"), "floor-3 elevator stop should be visible");
   assert(elements.get("spatial-location-list").innerHTML.includes("小车一楼至三楼电梯运输"), "elevator route should be visible");
   assert(!semantic.innerHTML.includes("样品定量分装"), "workflow must wait for MQTT preprocessing");
+
+  window.dispatchEvent(new CustomEvent("autolab:document-intent", {
+    detail: {
+      intent: { document_id: "DOC-UI-001" },
+      semanticParams: {
+        msgId: "msg_document-ui", type: "semantic_params", author: "vd10_document_intent",
+        workflowId: "wf_document-ui", index: 1, status: "success", history: [],
+        originalText: "委托单DOC-UI-001，样品SAMPLE-001，检测项目：蒸馏特性",
+        parameters: {
+          sample_id: { type: "string", value: "SAMPLE-001" },
+          requested_tests: { type: "string", value: "蒸馏特性（GB/T 6536）" },
+          target_device: { type: "string", value: "VD10" }
+        },
+        clarification: { needed: false, missingFields: [], conflictingFields: [], questions: [] },
+        timestamp: Date.now()
+      }
+    }
+  }));
+  assert(elements.get("intent-summary").innerHTML.includes("来源：委托单文档识别"), "document input source should be visible");
+  assert(elements.get("intent-summary").innerHTML.includes("SAMPLE-001"), "document semantic fields should be visible");
+
+  setIntent(defaultText);
   await parseButton.listeners.click();
   assert(elements.get("intent-state").textContent.includes("需要补充信息"), "incomplete direct input must request required fields");
 

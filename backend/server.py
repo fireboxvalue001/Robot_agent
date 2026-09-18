@@ -12,6 +12,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .asr_service import detect_voice_format, transcribe_with_tencent_cloud
+from .document_intent.router import router as document_intent_router
+from .document_intent.service import runtime_status as document_intent_runtime_status
 from .mqtt_service import mqtt_service
 from .planning_service import plan_natural_language
 from .planner.router import planner_runtime_status, router as planner_router
@@ -33,7 +35,7 @@ MAX_AUDIO_SIZE = 3 * 1024 * 1024
 META_OPERATION_LIBRARY = FRONTEND_DIR / "data" / "meta-operations.json"
 SPATIAL_LOCATION_LIBRARY = FRONTEND_DIR / "data" / "spatial-locations.json"
 PUBLIC_ASSETS = {
-    "app.js", "index.html", "meta-operation.css", "mqtt-input.js",
+    "app.js", "document-intent.js", "index.html", "meta-operation.css", "mqtt-input.js",
     "planner-controls.css", "styles.css", "voice-input.js",
 }
 PUBLIC_DATA_FILES = {
@@ -50,6 +52,7 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(title="VD10 Visual Workflow with ASR and MQTT", version="0.3.0", lifespan=lifespan)
 app.include_router(planner_router)
+app.include_router(document_intent_router)
 
 
 class AsrTimingRequest(BaseModel):
@@ -106,6 +109,7 @@ def health_check() -> dict:
         },
         "mqtt": mqtt_service.status(),
         "planner": planner_runtime_status(),
+        "documentIntent": document_intent_runtime_status(),
     }
 
 

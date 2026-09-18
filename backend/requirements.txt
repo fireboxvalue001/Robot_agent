@@ -1,6 +1,7 @@
 fastapi==0.115.6
 jsonschema>=4.19.0,<5.0.0
 paho-mqtt>=2.0.0,<3.0.0
+pypdf>=5.0.0,<7.0.0
 python-dotenv==1.0.1
 python-multipart==0.0.20
 tencentcloud-sdk-python>=3.0.0
