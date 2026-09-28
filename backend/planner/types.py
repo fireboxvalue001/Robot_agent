@@ -18,6 +18,15 @@ class SampleParameters(StrictModel):
     operator: str | None = Field(default=None, min_length=1, max_length=100)
 
 
+class TaskIntent(StrictModel):
+    source: Literal["text", "asr", "document", "history", "semantic"] = "text"
+    requested_tests: list[str] = Field(default_factory=list, max_length=50)
+    sample_count: int | None = Field(default=None, ge=1, le=1000)
+    sample_volume_ml: float | None = Field(default=None, gt=0)
+    target_device: str | None = Field(default=None, max_length=100)
+    missing_fields: list[str] = Field(default_factory=list, max_length=50)
+
+
 class PlannerRequest(StrictModel):
     scenario_id: str = Field(default="vd10_single_sample_demo", min_length=1, max_length=100)
     knowledge_mode: Literal["approved_only", "demo"] = "approved_only"
@@ -25,6 +34,7 @@ class PlannerRequest(StrictModel):
     workflow_id: str | None = Field(default=None, min_length=1, max_length=120)
     text: str = Field(min_length=1, max_length=10000)
     parameters: SampleParameters
+    task_intent: TaskIntent | None = None
     read_results: bool = True
     measurement_repeats: int = Field(default=1, ge=1, le=10)
 
@@ -71,3 +81,4 @@ class PlannerResult(StrictModel):
     issues: list[dict]
     evidence: list[dict]
     generation: dict
+    reasoning_trace: dict = Field(default_factory=dict)

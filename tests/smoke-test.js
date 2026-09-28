@@ -105,6 +105,50 @@ global.fetch = async (resource, options = {}) => {
           runtime: request.model_mode === "deepseek" ? "deepseek_api" : "deterministic",
           network_inference: request.model_mode === "deepseek",
           order_repaired: false
+        },
+        reasoning_trace: {
+          trace_id: "trace_ui-test",
+          trace_type: "verified_decision_trace",
+          facts: [
+            { fact_id: "F01", name: "sample_id", value: request.parameters.sample_id, source: { type: "request_parameter", path: "request.parameters.sample_id" } },
+            { fact_id: "F02", name: "target_device", value: "VD10", source: { type: "scenario_constraint", path: "scenario.scope" } }
+          ],
+          goals: operationIds.map((operationId, index) => ({
+            goal_id: `G${index + 1}`,
+            description: operationId,
+            origin: "scenario_required",
+            status: "covered",
+            covered_by: [operationId],
+            candidate_operations: [operationId],
+            reason: `由元操作 ${operationId} 覆盖。`
+          })),
+          mappings: operationIds.map((operationId, index) => ({
+            goal_id: `G${index + 1}`,
+            step_id: `smart_${index + 1}`,
+            operation_id: operationId,
+            operation_name: operationId,
+            inputs: index === 0 ? [{ name: "sample_id", value: request.parameters.sample_id, source: "request.parameters.sample_id" }] : [],
+            outputs: ["verified_output"],
+            depends_on: index ? [`smart_${index}`] : [],
+            evidence_ids: [`cap:${operationId}`]
+          })),
+          validation: {
+            operation_ids_valid: true,
+            parameters_complete: true,
+            dependency_chain_closed: true,
+            goal_coverage_complete: true,
+            ordering_valid: true,
+            evidence_valid: true,
+            unresolved_goals: [],
+            missing_parameters: [],
+            unsupported_operations: []
+          },
+          decision: {
+            status: "PHYSICAL_PENDING",
+            logical_executable: true,
+            physical_executable: null,
+            message: "C2元操作组合校验通过，等待物理可执行确认。"
+          }
         }
       })
     };
@@ -381,6 +425,10 @@ setTimeout(async () => {
   assert(semantic.innerHTML.includes("非联网仪器屏幕数据读取"), "intelligent planning should render robot result reading");
   assert(elements.get("physical-flow").innerHTML.includes("等待外部物理可执行确认"), "intelligent plans must wait for physical validation");
   assert(elements.get("intent-summary").innerHTML.includes("模型运行时：deterministic"), "planner runtime should be visible");
+  assert(elements.get("reasoning-decision").textContent.includes("逻辑通过"), "verified reasoning decision should be visible");
+  assert(elements.get("reasoning-trace").innerHTML.includes("元操作ID有效：通过"), "independent validation checks should be visible");
+  assert(elements.get("reasoning-trace").innerHTML.includes("request.parameters.sample_id"), "parameter provenance should be visible");
+  assert(elements.get("reasoning-trace").innerHTML.includes("cap:vd10.meta.sample_test"), "capability evidence should be visible");
   elements.get("planner-mode").value = "rules";
 
   const externalText = "将样品分成2份送到VD10检测";

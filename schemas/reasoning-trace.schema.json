@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autolab.local/schemas/reasoning-trace.schema.json",
+  "title": "AutoLab verified planner decision trace",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "trace_id", "trace_type", "notice", "capability_library", "facts",
+    "goals", "mappings", "validation", "decision"
+  ],
+  "properties": {
+    "trace_id": {"type": "string", "pattern": "^trace_"},
+    "trace_type": {"const": "verified_decision_trace"},
+    "notice": {"type": "string", "minLength": 1},
+    "capability_library": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "checksum"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "checksum": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fact_id", "name", "value", "source"],
+        "properties": {
+          "fact_id": {"type": "string", "pattern": "^F[0-9]+$"},
+          "name": {"type": "string", "minLength": 1},
+          "value": {},
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "path"],
+            "properties": {
+              "type": {"type": "string", "minLength": 1},
+              "path": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "goal_id", "description", "origin", "status", "covered_by",
+          "candidate_operations", "reason"
+        ],
+        "properties": {
+          "goal_id": {"type": "string", "pattern": "^[GU][0-9]+$"},
+          "description": {"type": "string", "minLength": 1},
+          "origin": {"enum": ["scenario_required", "user_request", "model_unresolved"]},
+          "status": {
+            "enum": ["pending", "capability_matched", "covered", "uncovered", "scenario_blocked", "needs_input", "unsupported"]
+          },
+          "covered_by": {"type": "array", "items": {"type": "string"}},
+          "candidate_operations": {"type": "array", "items": {"type": "string"}},
+          "reason": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "goal_id", "step_id", "operation_id", "operation_name", "operation_version",
+          "capability_status", "inputs", "outputs", "depends_on", "evidence_ids"
+        ],
+        "properties": {
+          "goal_id": {"type": ["string", "null"]},
+          "step_id": {"type": "string", "minLength": 1},
+          "operation_id": {"type": "string", "pattern": "^[a-z0-9_.-]+$"},
+          "operation_name": {"type": "string", "minLength": 1},
+          "operation_version": {"type": "string", "minLength": 1},
+          "capability_status": {"type": "string", "minLength": 1},
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "required", "bound", "value", "source"],
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "required": {"type": "boolean"},
+                "bound": {"type": "boolean"},
+                "value": {},
+                "source": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "outputs": {"type": "array", "items": {"type": "string"}},
+          "depends_on": {"type": "array", "items": {"type": "string"}},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_ids_valid", "parameters_complete", "dependency_chain_closed",
+        "goal_coverage_complete", "ordering_valid", "evidence_valid",
+        "unresolved_goals", "missing_parameters", "unsupported_operations"
+      ],
+      "properties": {
+        "operation_ids_valid": {"type": ["boolean", "null"]},
+        "parameters_complete": {"type": ["boolean", "null"]},
+        "dependency_chain_closed": {"type": ["boolean", "null"]},
+        "goal_coverage_complete": {"type": ["boolean", "null"]},
+        "ordering_valid": {"type": ["boolean", "null"]},
+        "evidence_valid": {"type": ["boolean", "null"]},
+        "unresolved_goals": {"type": "array", "items": {"type": "string"}},
+        "missing_parameters": {"type": "array", "items": {"type": "string"}},
+        "unsupported_operations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "logical_executable", "physical_executable", "message"],
+      "properties": {
+        "status": {
+          "enum": [
+            "ANALYZING", "PHYSICAL_PENDING", "EXECUTABLE", "PHYSICAL_BLOCKED", "NEEDS_INPUT",
+            "NEEDS_REVIEW", "UNSUPPORTED", "LOGICAL_BLOCKED", "MODEL_ERROR"
+          ]
+        },
+        "logical_executable": {"type": "boolean"},
+        "physical_executable": {"type": ["boolean", "null"]},
+        "message": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

@@ -39,8 +39,10 @@ let lastAnalysis = null;
 let latestSemanticMessage = null;
 let latestPlannerMessage = null;
 let latestPhysicalValidation = null;
+let latestReasoningTrace = null;
 let activeExternalPlanId = null;
 let latestSemanticSource = { type: "live" };
+let latestInputSource = "text";
 let semanticResultStale = false;
 let localPlanningInProgress = false;
 let executionRecords = [];
@@ -350,11 +352,13 @@ function buildLegacyMetaOperationLibrary() {
 function bindStaticEvents() {
   $("parse-intent").addEventListener("click", generateWorkflowFromPreprocessing);
   $("intent-input").addEventListener("input", () => {
+    latestInputSource = "text";
     if (!latestSemanticMessage) return;
     semanticResultStale = $("intent-input").value.trim() !==
       String(latestSemanticMessage.originalText || "").trim();
     if (semanticResultStale) {
       workflow = [];
+      latestReasoningTrace = null;
       lastAnalysis = null;
       resetExecutionState();
     }
@@ -365,6 +369,7 @@ function bindStaticEvents() {
   });
   $("clear-flow").addEventListener("click", () => {
     workflow = [];
+    latestReasoningTrace = null;
     taskId = createId("task");
     lastAnalysis = null;
     resetExecutionState();
@@ -385,6 +390,9 @@ function bindStaticEvents() {
   });
   window.addEventListener("autolab:semantic-params", (event) => {
     receiveSemanticParameters(event.detail, { type: "live" });
+  });
+  window.addEventListener("autolab:asr-transcription", () => {
+    latestInputSource = "asr";
   });
   window.addEventListener("autolab:document-intent", (event) => {
     const semantic = event.detail?.semanticParams;
@@ -424,9 +432,11 @@ function bindStaticEvents() {
 function receiveSemanticParameters(message, source = { type: "live" }) {
   latestSemanticMessage = message && typeof message === "object" ? message : null;
   latestSemanticSource = source;
+  if (["document", "history", "live"].includes(source.type)) latestInputSource = source.type === "live" ? "semantic" : source.type;
   semanticResultStale = false;
   latestPlannerMessage = null;
   latestPhysicalValidation = null;
+  latestReasoningTrace = null;
   activeExternalPlanId = null;
   workflow = [];
   taskId = createId("task");
@@ -444,6 +454,8 @@ function receiveSemanticParameters(message, source = { type: "live" }) {
 
 function receivePlannerResult(message, sourceLabel = "外部任务编排接口返回") {
   latestPlannerMessage = message && typeof message === "object" ? message : null;
+  latestReasoningTrace = latestPlannerMessage?.plannerMetadata?.reasoningTrace ||
+    latestPlannerMessage?.reasoning_trace || null;
   latestPhysicalValidation = null;
   activeExternalPlanId = null;
   workflow = [];
@@ -527,6 +539,18 @@ function receivePhysicalValidation(message) {
     return;
   }
   latestPhysicalValidation = message;
+  if (latestReasoningTrace?.decision?.logical_executable) {
+    const executable = message.result === "executable";
+    const blockers = (message.stepResults || []).flatMap((item) => item.blockers || []);
+    latestReasoningTrace.decision = {
+      status: executable ? "EXECUTABLE" : "PHYSICAL_BLOCKED",
+      logical_executable: true,
+      physical_executable: executable,
+      message: executable
+        ? "C2逻辑校验与外部物理可执行确认均已通过。"
+        : `逻辑校验通过，但物理执行被阻断：${blockers.join("；") || "外部物理条件未通过"}`
+    };
+  }
   renderAll();
   showToast(message.result === "executable" ? "物理可执行确认通过" : "已收到物理校验结论");
 }
@@ -725,13 +749,14 @@ async function generateWorkflowFromPreprocessing() {
   if (localPlanningInProgress) return;
 
   const plannerMode = $("planner-mode")?.value || "rules";
+  if (plannerMode === "rules") latestReasoningTrace = null;
   localPlanningInProgress = true;
   $("parse-intent").disabled = true;
   lastAnalysis = {
     matched: false,
     message: plannerMode === "rules"
       ? "正在通过自然语言编排接口生成流程..."
-      : `正在通过${plannerMode === "deepseek" ? " DeepSeek" : "离线受限模式"}生成逻辑计划...`,
+      : `正在通过${plannerMode === "deepseek" ? "AI智能编排" : "AI智能编排（离线状态）"}生成逻辑计划...`,
     factors: []
   };
   renderAll();
@@ -747,7 +772,7 @@ async function generateWorkflowFromPreprocessing() {
       if (result.preprocessing) {
         receiveSemanticParameters(result.preprocessing, { type: "local_api" });
       }
-      receivePlannerResult(result, "本地自然语言规则编排");
+      receivePlannerResult(result, "本地关键词编排");
     } else {
       await generateIntelligentPlan(text, plannerMode);
     }
@@ -777,6 +802,18 @@ async function generateIntelligentPlan(text, modelMode) {
 
   const currentSemanticMatches = latestSemanticMessage && !semanticResultStale &&
     text === String(latestSemanticMessage.originalText || "").trim();
+  const requestedTests = currentSemanticMatches ? String(semanticValue("requested_tests") || "")
+    .split(/[；;、]/).map((item) => item.trim()).filter(Boolean) : [];
+  const sampleCount = Number(currentSemanticMatches ? semanticValue("sample_count") : null);
+  const sampleVolume = Number(currentSemanticMatches ? semanticValue("sample_total_volume", "sample_volume_requirement") : null);
+  const taskIntent = {
+    source: latestInputSource,
+    requested_tests: requestedTests,
+    sample_count: Number.isInteger(sampleCount) && sampleCount > 0 ? sampleCount : null,
+    sample_volume_ml: Number.isFinite(sampleVolume) && sampleVolume > 0 ? sampleVolume : null,
+    target_device: currentSemanticMatches ? (semanticValue("target_device") || null) : null,
+    missing_fields: currentSemanticMatches ? (latestSemanticMessage.clarification?.missingFields || []) : []
+  };
   const workflowId = currentSemanticMatches && latestSemanticMessage.workflowId
     ? latestSemanticMessage.workflowId
     : `wf_ui_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -789,6 +826,7 @@ async function generateIntelligentPlan(text, modelMode) {
       model_mode: modelMode,
       workflow_id: workflowId,
       text,
+      task_intent: taskIntent,
       parameters: {
         sample_id: sampleId,
         handoff_confirmed: handoffConfirmed,
@@ -803,9 +841,13 @@ async function generateIntelligentPlan(text, modelMode) {
 
   const issues = Array.isArray(result.issues) ? result.issues : [];
   if (result.status !== "logical_pass") {
-    const message = issues.map((issue) => issue.message).filter(Boolean).join("；") ||
+    const message = issues.map(formatPlannerIssue).filter(Boolean).join("；") ||
       `规划未通过：${result.status || "unknown"}`;
-    receivePlannerResult({ status: "failed", warnings: [message] }, "智能逻辑规划接口");
+    receivePlannerResult({
+      status: "failed",
+      warnings: [message],
+      plannerMetadata: { reasoningTrace: result.reasoning_trace || null }
+    }, "智能逻辑规划接口");
     return;
   }
 
@@ -839,18 +881,30 @@ async function generateIntelligentPlan(text, modelMode) {
       orderRepaired: result.generation?.order_repaired,
       physicalStatus: result.physical_status,
       executionAllowed: result.execution_allowed,
+      reasoningTrace: result.reasoning_trace || null,
       issues
     }
   };
   receivePlannerResult(
     normalized,
-    modelMode === "deepseek" ? "DeepSeek智能逻辑规划" : "离线受限逻辑规划"
+    modelMode === "deepseek" ? "AI智能编排" : "AI智能编排（离线状态）"
   );
   if (lastAnalysis?.matched) {
     lastAnalysis.factors.push(`模型运行时：${result.generation?.runtime || modelMode}`);
     lastAnalysis.factors.push(`物理状态：${result.physical_status || "not_evaluated"}`);
     renderAll();
   }
+}
+
+function formatPlannerIssue(issue) {
+  if (!issue || typeof issue !== "object") return "";
+  const details = [
+    ...(Array.isArray(issue.items) ? issue.items : []),
+    ...(Array.isArray(issue.fields) ? issue.fields.map((item) => `缺少字段 ${item}`) : []),
+    ...(Array.isArray(issue.checks) ? issue.checks.map((item) => `校验失败 ${item}`) : []),
+    ...(Array.isArray(issue.errors) ? issue.errors : [])
+  ];
+  return [issue.message, ...details].filter(Boolean).join("：");
 }
 
 function generateWorkflowLocally() {
@@ -1000,8 +1054,26 @@ function appendMetaOperation(metaId, options = {}) {
 
 function addMetaOperation(metaId, options = {}) {
   if (!appendMetaOperation(metaId, options)) return;
+  invalidateReasoningTrace("流程已手动加入元操作，需要重新进行AI编排和C2校验。");
   resetExecutionState();
   renderAll();
+}
+
+function invalidateReasoningTrace(message) {
+  if (!latestReasoningTrace) return;
+  const checks = latestReasoningTrace.validation || {};
+  [
+    "operation_ids_valid", "parameters_complete", "dependency_chain_closed",
+    "goal_coverage_complete", "ordering_valid", "evidence_valid"
+  ].forEach((key) => { checks[key] = null; });
+  checks.unresolved_goals = [message];
+  latestReasoningTrace.validation = checks;
+  latestReasoningTrace.decision = {
+    status: "LOGICAL_BLOCKED",
+    logical_executable: false,
+    physical_executable: null,
+    message
+  };
 }
 
 function appendFloorTransport(destinationFloor, targetCount, timing) {
@@ -1385,11 +1457,130 @@ function physicalMessage(step) {
 
 function renderAll() {
   const validation = validateWorkflow();
+  renderReasoningTrace();
   renderFlow(validation);
   renderIntentSummary();
   syncExecutionRecords();
   renderExecutionStatus(validation);
   renderStructuredResults(validation);
+}
+
+function renderReasoningTrace() {
+  const container = $("reasoning-trace");
+  const decisionNode = $("reasoning-decision");
+  if (!container || !decisionNode) return;
+  const trace = latestReasoningTrace;
+  if (!trace) {
+    decisionNode.textContent = "尚未生成";
+    decisionNode.className = "trace-decision";
+    container.innerHTML = '<div class="empty compact-empty">选择AI智能编排并生成流程后显示</div>';
+    return;
+  }
+
+  const decision = trace.decision || {};
+  const decisionLabels = {
+    PHYSICAL_PENDING: "逻辑通过 · 待物理确认",
+    EXECUTABLE: "可以执行",
+    PHYSICAL_BLOCKED: "物理执行阻断",
+    NEEDS_INPUT: "需要补充输入",
+    NEEDS_REVIEW: "需要审核知识",
+    UNSUPPORTED: "能力不支持",
+    LOGICAL_BLOCKED: "逻辑校验阻断",
+    MODEL_ERROR: "模型调用失败",
+    ANALYZING: "分析中"
+  };
+  const decisionClass = decision.status === "PHYSICAL_BLOCKED" ? "blocked" : decision.logical_executable ? "pass" :
+    (decision.status === "ANALYZING" ? "pending" : "blocked");
+  decisionNode.textContent = decisionLabels[decision.status] || decision.status || "未知状态";
+  decisionNode.className = `trace-decision ${decisionClass}`;
+
+  const facts = (trace.facts || []).map((fact) => `
+    <div class="trace-fact">
+      <span>${escapeHtml(fact.fact_id || "")}</span>
+      <b>${escapeHtml(fact.name || "")}</b>
+      <code>${escapeHtml(traceDisplayValue(fact.value))}</code>
+      <small>${escapeHtml(fact.source?.type || "unknown")} · ${escapeHtml(fact.source?.path || "")}</small>
+    </div>`).join("");
+  const goalItems = (trace.goals || []).filter((goal) => goal.origin !== "scenario_required");
+  const scenarioGoals = (trace.goals || []).filter((goal) => goal.origin === "scenario_required");
+  const coveredGoalCount = goalItems.filter((goal) => goal.status === "covered").length;
+  const matchedGoalCount = goalItems.filter((goal) => goal.status === "capability_matched").length;
+  const uncoveredGoalCount = goalItems.length - coveredGoalCount;
+  const goalStatusLabels = {
+    covered: "已覆盖",
+    capability_matched: "能力匹配，未编排",
+    scenario_blocked: "能力存在，当前场景未开放",
+    needs_input: "缺少必要输入",
+    unsupported: "C2能力库不支持",
+    uncovered: "本次编排未覆盖",
+    pending: "待判定"
+  };
+  const goalStatusClasses = new Set(Object.keys(goalStatusLabels));
+  const renderGoal = (goal) => {
+    const status = goalStatusClasses.has(goal.status) ? goal.status : "pending";
+    const coveredBy = (goal.covered_by || []).join("、");
+    const candidates = (goal.candidate_operations || []).join("、");
+    const details = [];
+    if (status === "covered" && coveredBy) details.push(`覆盖元操作：${coveredBy}`);
+    if (status !== "covered" && candidates) details.push(`候选元操作：${candidates}`);
+    if (goal.reason) details.push(goal.reason);
+    if (!details.length) details.push(goalStatusLabels[status]);
+    return `
+      <div class="trace-goal ${status}">
+        <span>${escapeHtml(goal.goal_id || "")}</span>
+        <b>${escapeHtml(goal.description || "")}</b>
+        <em>${escapeHtml(goalStatusLabels[status])}</em>
+        <small>${escapeHtml(details.join("；"))}</small>
+      </div>`;
+  };
+  const goals = goalItems.map(renderGoal).join("");
+  const candidateGoals = scenarioGoals.map(renderGoal).join("");
+  const mappings = (trace.mappings || []).map((mapping) => {
+    const inputs = (mapping.inputs || []).map((input) =>
+      `${input.name}=${traceDisplayValue(input.value)} ← ${input.source || "无来源"}`
+    ).join("；");
+    return `
+      <details class="trace-mapping">
+        <summary><span>${escapeHtml(mapping.goal_id || "-")} → ${escapeHtml(mapping.operation_name || "")}</span><code>${escapeHtml(mapping.operation_id || "")}</code></summary>
+        <p><b>输入绑定：</b>${escapeHtml(inputs || "无")}</p>
+        <p><b>声明输出：</b>${escapeHtml((mapping.outputs || []).join("、") || "无")}</p>
+        <p><b>依赖步骤：</b>${escapeHtml((mapping.depends_on || []).join("、") || "无")}</p>
+        <p><b>证据：</b>${escapeHtml((mapping.evidence_ids || []).join("、") || "无")}</p>
+      </details>`;
+  }).join("");
+  const validationLabels = {
+    operation_ids_valid: "元操作ID有效",
+    parameters_complete: "参数与来源完整",
+    dependency_chain_closed: "依赖链闭合",
+    goal_coverage_complete: "目标覆盖完整",
+    ordering_valid: "操作顺序有效",
+    evidence_valid: "证据引用有效"
+  };
+  const validations = Object.entries(validationLabels).map(([key, label]) => {
+    const value = trace.validation?.[key];
+    const state = value === true ? "pass" : value === false ? "fail" : "pending";
+    const text = value === true ? "通过" : value === false ? "失败" : "待检查";
+    return `<span class="trace-check ${state}">${escapeHtml(label)}：${text}</span>`;
+  }).join("");
+  const unresolved = [
+    ...(trace.validation?.unresolved_goals || []),
+    ...(trace.validation?.missing_parameters || []),
+    ...(trace.validation?.unsupported_operations || [])
+  ];
+
+  container.innerHTML = `
+    <section class="trace-section"><h3>1. 输入事实与来源</h3><div class="trace-facts">${facts || '<span class="muted">无事实</span>'}</div></section>
+    <section class="trace-section"><h3>2. 用户目标（已验证覆盖 ${coveredGoalCount}/${goalItems.length}，能力匹配未编排 ${matchedGoalCount}，未验证覆盖 ${uncoveredGoalCount}）</h3><div class="trace-goals">${goals || '<span class="muted">无目标</span>'}</div></section>
+    <section class="trace-section"><h3>VD10场景候选操作（仅能力匹配不代表任务可执行）</h3><div class="trace-goals">${candidateGoals || '<span class="muted">无候选操作</span>'}</div></section>
+    <section class="trace-section"><h3>3. C2元操作映射</h3>${mappings || '<div class="trace-empty">尚未形成可验证元操作映射</div>'}</section>
+    <section class="trace-section"><h3>4. 操作链内部校验</h3><div class="trace-checks">${validations}</div>${unresolved.length ? `<div class="trace-unresolved">未解决：${escapeHtml(unresolved.join("；"))}</div>` : ""}</section>
+    <section class="trace-decision-card ${decisionClass}"><b>${escapeHtml(decisionLabels[decision.status] || decision.status || "未知状态")}</b><p>${escapeHtml(decision.message || "")}</p></section>`;
+}
+
+function traceDisplayValue(value) {
+  if (value === null || value === undefined || value === "") return "未提供";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function renderFlow(validation) {
@@ -1403,6 +1594,7 @@ function renderFlow(validation) {
   document.querySelectorAll(".flow-remove").forEach((button) => {
     button.addEventListener("click", () => {
       workflow = workflow.filter((step) => step.id !== button.dataset.id);
+      invalidateReasoningTrace("流程已手动删除元操作，需要重新进行AI编排和C2校验。");
       resetExecutionState();
       renderAll();
     });
@@ -1421,6 +1613,7 @@ function renderFlow(validation) {
       if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return;
       const [moved] = workflow.splice(sourceIndex, 1);
       workflow.splice(targetIndex, 0, moved);
+      invalidateReasoningTrace("流程顺序已被手动调整，需要重新进行AI编排和顺序校验。");
       resetExecutionState();
       renderAll();
     });

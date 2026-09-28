@@ -76,9 +76,260 @@
   color: var(--red);
 }
 
+.reasoning-trace-panel {
+  margin-bottom: 12px;
+  border: 1px solid #3d3560;
+  border-radius: 8px;
+  background: #0e0d16;
+}
+
+.reasoning-trace-panel > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: #d7c7ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trace-notice {
+  margin: 0;
+  padding: 0 12px 9px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.reasoning-trace {
+  max-height: 520px;
+  overflow: auto;
+  padding: 0 10px 10px;
+}
+
+.trace-decision {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.trace-decision.pass,
+.trace-check.pass {
+  color: var(--green);
+}
+
+.trace-decision.blocked,
+.trace-check.fail {
+  color: var(--red);
+}
+
+.trace-decision.pending,
+.trace-check.pending {
+  color: var(--orange);
+}
+
+.trace-section {
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid #282b3b;
+  border-radius: 7px;
+  background: #131520;
+}
+
+.trace-section h3 {
+  margin: 0 0 7px;
+  color: #bfa8ff;
+  font-size: 11px;
+}
+
+.trace-facts,
+.trace-goals {
+  display: grid;
+  gap: 5px;
+}
+
+.trace-fact,
+.trace-goal {
+  display: grid;
+  grid-template-columns: 30px minmax(90px, 0.7fr) minmax(110px, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 5px;
+  background: #191c28;
+  font-size: 10px;
+}
+
+.trace-fact > span,
+.trace-goal > span {
+  color: #9a84d8;
+}
+
+.trace-fact code {
+  color: #dce5f5;
+  overflow-wrap: anywhere;
+}
+
+.trace-fact small,
+.trace-goal small {
+  grid-column: 2 / -1;
+  color: var(--muted);
+}
+
+.trace-goal em {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.trace-goal.covered {
+  border-left: 3px solid var(--green);
+}
+
+.trace-goal.covered em {
+  color: var(--green);
+}
+
+.trace-goal.capability_matched {
+  border-left: 3px solid #69aef5;
+}
+
+.trace-goal.capability_matched em {
+  color: #69aef5;
+}
+
+.trace-goal.scenario_blocked {
+  border-left: 3px solid #ff9f43;
+}
+
+.trace-goal.scenario_blocked em {
+  color: #ffb86b;
+}
+
+.trace-goal.needs_input {
+  border-left: 3px solid #f3d35b;
+}
+
+.trace-goal.needs_input em {
+  color: #f3d35b;
+}
+
+.trace-goal.unsupported,
+.trace-goal.uncovered {
+  border-left: 3px solid var(--red);
+}
+
+.trace-goal.unsupported em,
+.trace-goal.uncovered em {
+  color: var(--red);
+}
+
+.trace-goal.pending {
+  border-left: 3px solid #758097;
+}
+
+.trace-mapping {
+  margin: 5px 0;
+  border: 1px solid #303548;
+  border-radius: 5px;
+  background: #171a25;
+}
+
+.trace-mapping summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px;
+  cursor: pointer;
+  color: #d7def0;
+  font-size: 10px;
+}
+
+.trace-mapping summary code {
+  color: #8fa6d3;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.trace-mapping p {
+  margin: 4px 8px;
+  color: #9facbf;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.trace-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.trace-check {
+  padding: 3px 6px;
+  border: 1px solid #34394a;
+  border-radius: 99px;
+  background: #1b1f2b;
+  font-size: 10px;
+}
+
+.trace-unresolved {
+  margin-top: 7px;
+  padding: 7px;
+  border-left: 3px solid var(--red);
+  background: #28171d;
+  color: #ffb2bb;
+  font-size: 10px;
+}
+
+.trace-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.trace-decision-card {
+  margin-top: 8px;
+  padding: 9px;
+  border-radius: 7px;
+  background: #171b25;
+  border: 1px solid #343b4b;
+  font-size: 11px;
+}
+
+.trace-decision-card.pass {
+  border-color: #2b7455;
+}
+
+.trace-decision-card.blocked {
+  border-color: #8b3947;
+}
+
+.trace-decision-card.pending {
+  border-color: #8b632f;
+}
+
+.trace-decision-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
 @media (max-width: 760px) {
   .planner-request-settings {
     width: 100%;
     margin-top: 10px;
+  }
+
+  .trace-fact,
+  .trace-goal {
+    grid-template-columns: 28px 1fr;
+  }
+
+  .trace-goal em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .trace-fact code {
+    grid-column: 2;
   }
 }
