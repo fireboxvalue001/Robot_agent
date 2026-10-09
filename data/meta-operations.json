@@ -1,7 +1,7 @@
 {
-  "schema_version": "1.3.0",
+  "schema_version": "1.4.0",
   "library_id": "autolab.vd10.meta_operations",
-  "updated_at": "2026-09-14T12:00:00+08:00",
+  "updated_at": "2026-09-28T12:00:00+08:00",
   "categories": [
     { "id": "instrument", "name": "检测仪器元操作", "color": "green", "description": "由具体检测仪器执行的测试、控制和安全退出能力，按仪器分组管理。" },
     { "id": "robot", "name": "机器人元操作", "color": "blue", "description": "机器人完成的样品预处理、上下料、界面操作和结果信息读取能力。" },
@@ -9,6 +9,9 @@
   ],
   "instruments": [
     { "id": "vd10", "name": "VD10自动蒸馏测定仪", "description": "VD10专属测试与设备控制元操作。", "status": "pending_verification" },
+    { "id": "viscometer", "name": "运动黏度测定仪", "description": "型号与方法待绑定；仅预留测试和结果接口。", "status": "interface_only" },
+    { "id": "particle_counter", "name": "颗粒计数仪", "description": "型号与方法待绑定；仅预留测试和结果接口。", "status": "interface_only" },
+    { "id": "ftir", "name": "傅里叶变换红外光谱仪（FTIR）", "description": "型号与方法待绑定；仅预留采谱和结果接口。", "status": "interface_only" },
     { "id": "generic", "name": "通用/待绑定检测仪器", "description": "尚未绑定具体型号的通用检测接口。", "status": "interface_only" }
   ],
   "preconditions": [
@@ -96,6 +99,75 @@
       ] },
       "physical_requirements": [], "capability_boundary": { "allowed": ["退出应用程序"], "forbidden": ["关闭主电源", "测试运行时退出"], "requires_confirmation": ["运行状态无法识别时"] },
       "failure_policy": { "default_action": "stop", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "viscometer.meta.run_test", "version": "0.1.0", "name": "运动黏度检测接口", "category": "instrument", "instrument_id": "viscometer",
+      "description": "按已登记方法执行运动黏度检测；当前仅定义接口。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "常见检测项目能力占位（待设备说明书和人工验证）", "sections": ["运动黏度"] },
+      "inputs": { "type": "object", "required": ["sample_id", "method_id", "device_id"], "properties": { "sample_id": { "type": "string" }, "method_id": { "type": "string" }, "device_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["test_status"], "properties": { "test_status": { "type": "string" }, "result_ref": { "type": "string" } } },
+      "input_hint": "样品、检测方法与设备ID", "output_hint": "检测状态与结果引用", "precondition_refs": ["sample.identity.available", "test.method.registered", "instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [
+        { "instance_id": "visc_test_01", "type": "atomic_node", "node_ref": "viscometer.verify_setup", "name": "核对方法和设备状态", "source_type": "reserved_interface", "execution_policy": "interface_only" },
+        { "instance_id": "visc_test_02", "type": "atomic_node", "node_ref": "viscometer.run", "name": "调用检测接口", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["visc_test_01"] }
+      ] },
+      "physical_requirements": ["型号、标准方法、校准状态和装样方式已核验"], "capability_boundary": { "allowed": ["预留运动黏度检测接口"], "forbidden": ["未绑定设备时启动检测", "臆造检测结果"], "requires_confirmation": ["首次接入和方法变更时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "viscometer.meta.read_result", "version": "0.1.0", "name": "运动黏度结果读取接口", "category": "instrument", "instrument_id": "viscometer",
+      "description": "读取并核对运动黏度检测结果；当前仅定义接口。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "常见检测项目能力占位（待设备说明书和人工验证）", "sections": ["运动黏度结果"] },
+      "inputs": { "type": "object", "required": ["sample_id", "result_ref"], "properties": { "sample_id": { "type": "string" }, "result_ref": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["measurement"], "properties": { "measurement": { "type": "object" }, "evidence_ref": { "type": "string" } } },
+      "input_hint": "样品与检测结果引用", "output_hint": "运动黏度测量值与证据", "precondition_refs": ["sample.identity.available"],
+      "operation_tree": { "type": "sequence", "children": [ { "instance_id": "visc_read_01", "type": "atomic_node", "node_ref": "viscometer.result.read", "name": "读取结果并核验样品编号", "source_type": "reserved_interface", "execution_policy": "interface_only" } ] },
+      "physical_requirements": ["结果接口和单位已核验"], "capability_boundary": { "allowed": ["预留结果读取接口"], "forbidden": ["修改原始检测数据", "把未核验数值作为报告结果"], "requires_confirmation": ["结果身份不一致时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "particle_counter.meta.run_test", "version": "0.1.0", "name": "颗粒计数检测接口", "category": "instrument", "instrument_id": "particle_counter",
+      "description": "按已登记方法执行颗粒计数；当前仅定义接口。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "常见检测项目能力占位（待设备说明书和人工验证）", "sections": ["颗粒计数"] },
+      "inputs": { "type": "object", "required": ["sample_id", "method_id", "device_id"], "properties": { "sample_id": { "type": "string" }, "method_id": { "type": "string" }, "device_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["test_status"], "properties": { "test_status": { "type": "string" }, "result_ref": { "type": "string" } } },
+      "input_hint": "样品、检测方法与设备ID", "output_hint": "计数状态与结果引用", "precondition_refs": ["sample.identity.available", "test.method.registered", "instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [ { "instance_id": "particle_test_01", "type": "atomic_node", "node_ref": "particle_counter.verify_setup", "name": "核对方法与清洁状态", "source_type": "reserved_interface", "execution_policy": "interface_only" }, { "instance_id": "particle_test_02", "type": "atomic_node", "node_ref": "particle_counter.run", "name": "调用计数接口", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["particle_test_01"] } ] },
+      "physical_requirements": ["型号、方法、进样和清洁状态已核验"], "capability_boundary": { "allowed": ["预留颗粒计数接口"], "forbidden": ["未绑定设备时启动检测", "臆造颗粒分布"], "requires_confirmation": ["首次接入和方法变更时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "particle_counter.meta.read_result", "version": "0.1.0", "name": "颗粒计数结果读取接口", "category": "instrument", "instrument_id": "particle_counter",
+      "description": "读取粒径区间与颗粒数量；当前仅定义接口。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "常见检测项目能力占位（待设备说明书和人工验证）", "sections": ["颗粒计数结果"] },
+      "inputs": { "type": "object", "required": ["sample_id", "result_ref"], "properties": { "sample_id": { "type": "string" }, "result_ref": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["particle_counts"], "properties": { "particle_counts": { "type": "object" }, "evidence_ref": { "type": "string" } } },
+      "input_hint": "样品与检测结果引用", "output_hint": "分档颗粒计数及证据", "precondition_refs": ["sample.identity.available"],
+      "operation_tree": { "type": "sequence", "children": [ { "instance_id": "particle_read_01", "type": "atomic_node", "node_ref": "particle_counter.result.read", "name": "读取计数结果并核验样品编号", "source_type": "reserved_interface", "execution_policy": "interface_only" } ] },
+      "physical_requirements": ["结果接口和粒径单位已核验"], "capability_boundary": { "allowed": ["预留计数结果读取接口"], "forbidden": ["修改原始计数数据"], "requires_confirmation": ["结果身份不一致时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "ftir.meta.acquire_spectrum", "version": "0.1.0", "name": "FTIR光谱采集接口", "category": "instrument", "instrument_id": "ftir",
+      "description": "按已登记方法采集红外光谱；当前仅定义接口。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "常见检测项目能力占位（待设备说明书和人工验证）", "sections": ["FTIR"] },
+      "inputs": { "type": "object", "required": ["sample_id", "method_id", "device_id"], "properties": { "sample_id": { "type": "string" }, "method_id": { "type": "string" }, "device_id": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["test_status"], "properties": { "test_status": { "type": "string" }, "spectrum_ref": { "type": "string" } } },
+      "input_hint": "样品、采谱方法与设备ID", "output_hint": "采谱状态与光谱引用", "precondition_refs": ["sample.identity.available", "test.method.registered", "instrument.basic_operation.ready"],
+      "operation_tree": { "type": "sequence", "children": [ { "instance_id": "ftir_test_01", "type": "atomic_node", "node_ref": "ftir.verify_setup", "name": "核对背景与附件状态", "source_type": "reserved_interface", "execution_policy": "interface_only" }, { "instance_id": "ftir_test_02", "type": "atomic_node", "node_ref": "ftir.acquire", "name": "调用光谱采集接口", "source_type": "reserved_interface", "execution_policy": "interface_only", "depends_on": ["ftir_test_01"] } ] },
+      "physical_requirements": ["型号、背景、附件及样品制备方法已核验"], "capability_boundary": { "allowed": ["预留FTIR采谱接口"], "forbidden": ["未绑定设备时启动采谱", "臆造光谱"], "requires_confirmation": ["首次接入和方法变更时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
+    },
+    {
+      "id": "ftir.meta.read_spectrum", "version": "0.1.0", "name": "FTIR光谱结果读取接口", "category": "instrument", "instrument_id": "ftir",
+      "description": "读取光谱文件及元数据；当前仅定义接口。", "status": "interface_only", "execution_policy": "interface_only",
+      "source": { "type": "system_requirement", "reference": "常见检测项目能力占位（待设备说明书和人工验证）", "sections": ["FTIR结果"] },
+      "inputs": { "type": "object", "required": ["sample_id", "spectrum_ref"], "properties": { "sample_id": { "type": "string" }, "spectrum_ref": { "type": "string" } } },
+      "outputs": { "type": "object", "required": ["spectrum_metadata"], "properties": { "spectrum_metadata": { "type": "object" }, "evidence_ref": { "type": "string" } } },
+      "input_hint": "样品与光谱引用", "output_hint": "光谱元数据与证据", "precondition_refs": ["sample.identity.available"],
+      "operation_tree": { "type": "sequence", "children": [ { "instance_id": "ftir_read_01", "type": "atomic_node", "node_ref": "ftir.spectrum.read", "name": "读取光谱并核验样品编号", "source_type": "reserved_interface", "execution_policy": "interface_only" } ] },
+      "physical_requirements": ["光谱格式和数据接口已核验"], "capability_boundary": { "allowed": ["预留FTIR结果读取接口"], "forbidden": ["修改原始光谱", "自动给出未经验证的定性结论"], "requires_confirmation": ["结果身份不一致时"] },
+      "failure_policy": { "default_action": "request_confirmation", "max_retries": 0, "retryable_errors": [] }
     },
     {
       "id": "robot.meta.operate_industrial_pc", "version": "1.0.0", "name": "仪器工控机界面操作", "category": "robot",

@@ -24,7 +24,7 @@ GET http://<UI主机>:8877/api/v1/capabilities/spatial-locations
 ```json
 {
   "id": "autolab.vd10.meta_operations",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "checksum": "sha256:..."
 }
 ```

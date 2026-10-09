@@ -28,9 +28,9 @@ class AsrBackendTests(unittest.TestCase):
     def test_capability_endpoints_return_versioned_snapshots(self):
         operations = get_meta_operation_capabilities()
         self.assertEqual(operations["libraryId"], "autolab.vd10.meta_operations")
-        self.assertEqual(operations["libraryVersion"], "1.3.0")
+        self.assertEqual(operations["libraryVersion"], "1.4.0")
         self.assertTrue(operations["checksum"].startswith("sha256:"))
-        self.assertEqual(len(operations["metaOperations"]), 35)
+        self.assertEqual(len(operations["metaOperations"]), 41)
 
         spatial = get_spatial_location_capabilities()
         self.assertEqual(spatial["libraryId"], "autolab.multifloor_building")

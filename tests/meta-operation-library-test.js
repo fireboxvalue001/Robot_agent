@@ -16,17 +16,23 @@ const statuses = new Set(["draft", "pending_verification", "verified", "interfac
 const ids = new Set();
 const preconditionIds = new Set(library.preconditions.map((item) => item.id));
 
-assert(library.schema_version === "1.3.0", "unexpected schema version");
+assert(library.schema_version === "1.4.0", "unexpected schema version");
 assert(library.categories.length === 3, "the library must declare exactly three categories");
-assert(library.instruments.length === 2, "the library must declare its instrument groups");
-assert(library.meta_operations.length === 35, "the catalog should contain 35 meta operations");
-assert(library.meta_operations.filter((item) => item.category === "instrument").length === 7, "instrument catalog should contain 7 operations");
+assert(library.instruments.length === 5, "the library must declare its instrument groups");
+assert(library.meta_operations.length === 41, "the catalog should contain 41 meta operations");
+assert(library.meta_operations.filter((item) => item.category === "instrument").length === 13, "instrument catalog should contain 13 operations");
 assert(library.meta_operations.filter((item) => item.category === "robot").length === 24, "robot catalog should contain 24 operations");
 assert(library.meta_operations.filter((item) => item.category === "lab").length === 4, "lab catalog should contain 4 operations");
 
 const instrumentIds = new Set(library.instruments.map((item) => item.id));
 assert(instrumentIds.has("vd10"), "VD10 instrument group is missing");
 assert(instrumentIds.has("generic"), "generic instrument group is missing");
+for (const instrumentId of ["viscometer", "particle_counter", "ftir"]) {
+  assert(instrumentIds.has(instrumentId), `new instrument group is missing: ${instrumentId}`);
+  const operations = library.meta_operations.filter((item) => item.instrument_id === instrumentId);
+  assert(operations.length === 2, `${instrumentId} should declare testing and result interfaces`);
+  assert(operations.every((item) => item.status === "interface_only" && item.execution_policy === "interface_only"), `${instrumentId} must remain interface-only`);
+}
 
 for (const operation of library.meta_operations) {
   assert(operation.id && !ids.has(operation.id), `duplicate or empty id: ${operation.id}`);

@@ -94,6 +94,25 @@ class IntelligentPlannerTests(unittest.TestCase):
         self.assertEqual(result.reasoning_trace["decision"]["status"], "LOGICAL_BLOCKED")
         self.assertFalse(result.reasoning_trace["decision"]["logical_executable"])
 
+    def test_missing_sample_id_still_produces_candidate_chain(self):
+        result = self.service.plan(request(parameters=SampleParameters(handoff_confirmed=True)))
+        self.assertEqual(result.status, "needs_input")
+        self.assertEqual(result.issues[0]["code"], "DEFERRED_SAMPLE_ID")
+        self.assertTrue(result.generation["used"])
+        self.assertEqual(len(result.steps), 5)
+        self.assertNotIn("sample_id", result.steps[0].parameters)
+        self.assertFalse(result.reasoning_trace["validation"]["parameters_complete"])
+        self.assertFalse(result.reasoning_trace["decision"]["logical_executable"])
+        self.assertFalse(result.execution_allowed)
+        self.assertEqual(result.reasoning_trace["goals"][0]["status"], "capability_matched")
+
+    def test_operator_is_optional_for_planning(self):
+        result = self.service.plan(request(parameters=SampleParameters(
+            sample_id="sample-001", handoff_confirmed=True,
+        )))
+        self.assertEqual(result.status, "logical_pass")
+        self.assertNotIn("operator", result.steps[1].parameters)
+
     def test_approved_mode_rejects_draft_knowledge(self):
         result = self.service.plan(request(knowledge_mode="approved_only"))
         self.assertEqual(result.status, "needs_review")
@@ -149,7 +168,10 @@ class IntelligentPlannerTests(unittest.TestCase):
         self.assertEqual(result.status, "unsupported")
         self.assertEqual(result.steps, [])
         self.assertFalse(result.generation["used"])
-        self.assertEqual([goal["status"] for goal in result.reasoning_trace["goals"][:3]], ["unsupported"] * 3)
+        self.assertEqual([goal["status"] for goal in result.reasoning_trace["goals"][:3]], ["scenario_blocked"] * 3)
+        self.assertEqual(result.reasoning_trace["goals"][0]["candidate_operations"], ["viscometer.meta.run_test"])
+        self.assertEqual(result.reasoning_trace["goals"][1]["candidate_operations"], ["particle_counter.meta.run_test"])
+        self.assertEqual(result.reasoning_trace["goals"][2]["candidate_operations"], ["ftir.meta.acquire_spectrum"])
         self.assertFalse(result.reasoning_trace["validation"]["goal_coverage_complete"])
 
     def test_mixed_supported_and_unsupported_tests_show_individual_matches(self):
@@ -161,7 +183,7 @@ class IntelligentPlannerTests(unittest.TestCase):
         self.assertEqual(result.steps, [])
         goals = result.reasoning_trace["goals"]
         self.assertEqual(goals[0]["status"], "capability_matched")
-        self.assertEqual(goals[1]["status"], "unsupported")
+        self.assertEqual(goals[1]["status"], "scenario_blocked")
         self.assertEqual([goal["status"] for goal in goals[2:]], ["capability_matched"] * 5)
         self.assertFalse(result.reasoning_trace["validation"]["goal_coverage_complete"])
 

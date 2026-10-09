@@ -31,11 +31,11 @@
     "transport_links": 1,
     "building_floors": 3,
     "atomic_vd10_capabilities": 16,
-    "instrument_groups": 2,
-    "instrument_meta_operations": 7,
+    "instrument_groups": 5,
+    "instrument_meta_operations": 13,
     "robot_meta_operations": 24,
     "laboratory_meta_operations": 4,
-    "total_meta_operations": 35
+    "total_meta_operations": 41
   },
   "handoff": {
     "format_status": "prototype_meta_operation_handoff",

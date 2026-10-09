@@ -351,6 +351,20 @@ function buildLegacyMetaOperationLibrary() {
 
 function bindStaticEvents() {
   $("parse-intent").addEventListener("click", generateWorkflowFromPreprocessing);
+  $("clarification-submit").addEventListener("click", async () => {
+    const addition = $("clarification-input").value.trim();
+    if (!addition) return showToast("请先填写需要补充的信息");
+    if (localPlanningInProgress) return;
+    const original = $("intent-input").value.trim();
+    $("intent-input").value = `${original}\n补充信息：${addition}`;
+    $("clarification-input").value = "";
+    latestSemanticSource = { type: "clarification" };
+    semanticResultStale = true;
+    latestPlannerMessage = null;
+    latestReasoningTrace = null;
+    workflow = [];
+    await generateWorkflowFromPreprocessing();
+  });
   $("intent-input").addEventListener("input", () => {
     latestInputSource = "text";
     if (!latestSemanticMessage) return;
@@ -793,15 +807,20 @@ async function generateWorkflowFromPreprocessing() {
 }
 
 async function generateIntelligentPlan(text, modelMode) {
-  const sampleId = String($("planner-sample-id")?.value || semanticValue("sample_id") || "").trim();
+  const semanticText = String(latestSemanticMessage?.originalText || "").trim();
+  const supplement = latestSemanticSource.type === "clarification" && semanticText && text.startsWith(`${semanticText}\n补充信息：`)
+    ? text.slice(semanticText.length + "\n补充信息：".length) : "";
+  const confirmedDevice = /(?:目标)?(?:仪器|设备)[^，。；\n]*VD10|VD10[^，。；\n]*(?:仪器|设备)/i.test(supplement) ? "VD10" : null;
+  const currentSemanticMatches = latestSemanticMessage &&
+    ((!semanticResultStale && text === semanticText) || Boolean(supplement));
+  const inlineSampleId = text.match(/(?:样品(?:编号|ID)|sample[_ -]?id)\s*(?:为|是|[:：=])?\s*([A-Za-z0-9_-]+)/i)?.[1] || "";
+  const sampleId = String(inlineSampleId || (currentSemanticMatches ? semanticValue("sample_id") : null) || "").trim();
   const handoffConfirmed = Boolean($("planner-handoff-confirmed")?.checked);
-  const operator = String($("planner-operator")?.value || semanticValue("operator") || "").trim();
+  const inlineOperator = text.match(/(?:操作员|operator)\s*(?:为|是|[:：=])\s*([^\s，。；,;]+)/i)?.[1] || "";
+  const operator = String(inlineOperator || (currentSemanticMatches ? semanticValue("operator") : null) || "").trim();
   const readResults = $("planner-read-results")?.checked !== false;
-  if (!sampleId) throw new Error("请在“智能规划参数”中填写样品编号");
   if (!handoffConfirmed) throw new Error("请明确勾选“样品交接已确认”");
 
-  const currentSemanticMatches = latestSemanticMessage && !semanticResultStale &&
-    text === String(latestSemanticMessage.originalText || "").trim();
   const requestedTests = currentSemanticMatches ? String(semanticValue("requested_tests") || "")
     .split(/[；;、]/).map((item) => item.trim()).filter(Boolean) : [];
   const sampleCount = Number(currentSemanticMatches ? semanticValue("sample_count") : null);
@@ -811,8 +830,8 @@ async function generateIntelligentPlan(text, modelMode) {
     requested_tests: requestedTests,
     sample_count: Number.isInteger(sampleCount) && sampleCount > 0 ? sampleCount : null,
     sample_volume_ml: Number.isFinite(sampleVolume) && sampleVolume > 0 ? sampleVolume : null,
-    target_device: currentSemanticMatches ? (semanticValue("target_device") || null) : null,
-    missing_fields: currentSemanticMatches ? (latestSemanticMessage.clarification?.missingFields || []) : []
+    target_device: currentSemanticMatches ? (confirmedDevice || semanticValue("target_device") || null) : null,
+    missing_fields: currentSemanticMatches ? (latestSemanticMessage.clarification?.missingFields || []).filter((field) => !(field === "target_device" && confirmedDevice)) : []
   };
   const workflowId = currentSemanticMatches && latestSemanticMessage.workflowId
     ? latestSemanticMessage.workflowId
@@ -828,7 +847,7 @@ async function generateIntelligentPlan(text, modelMode) {
       text,
       task_intent: taskIntent,
       parameters: {
-        sample_id: sampleId,
+        sample_id: sampleId || null,
         handoff_confirmed: handoffConfirmed,
         operator: operator || null
       },
@@ -1471,6 +1490,10 @@ function renderReasoningTrace() {
   if (!container || !decisionNode) return;
   const trace = latestReasoningTrace;
   if (!trace) {
+    const questions = latestSemanticMessage?.clarification?.questions || [];
+    $("clarification-hint").textContent = questions.length
+      ? questions.join("；")
+      : "当系统提示目标、设备或参数不明确时，在这里补充后重新编排。";
     decisionNode.textContent = "尚未生成";
     decisionNode.className = "trace-decision";
     container.innerHTML = '<div class="empty compact-empty">选择AI智能编排并生成流程后显示</div>';
@@ -1479,14 +1502,14 @@ function renderReasoningTrace() {
 
   const decision = trace.decision || {};
   const decisionLabels = {
-    PHYSICAL_PENDING: "逻辑通过 · 待物理确认",
+    PHYSICAL_PENDING: "流程检查通过 · 待现场确认",
     EXECUTABLE: "可以执行",
-    PHYSICAL_BLOCKED: "物理执行阻断",
+    PHYSICAL_BLOCKED: "设备或现场条件不满足",
     NEEDS_INPUT: "需要补充输入",
-    NEEDS_REVIEW: "需要审核知识",
-    UNSUPPORTED: "能力不支持",
-    LOGICAL_BLOCKED: "逻辑校验阻断",
-    MODEL_ERROR: "模型调用失败",
+    NEEDS_REVIEW: "操作资料待审核",
+    UNSUPPORTED: "现有仪器或操作不支持",
+    LOGICAL_BLOCKED: "流程检查未通过",
+    MODEL_ERROR: "智能编排暂时失败",
     ANALYZING: "分析中"
   };
   const decisionClass = decision.status === "PHYSICAL_BLOCKED" ? "blocked" : decision.logical_executable ? "pass" :
@@ -1503,15 +1526,19 @@ function renderReasoningTrace() {
     </div>`).join("");
   const goalItems = (trace.goals || []).filter((goal) => goal.origin !== "scenario_required");
   const scenarioGoals = (trace.goals || []).filter((goal) => goal.origin === "scenario_required");
+  const clarificationItems = goalItems.filter((goal) => ["needs_input", "scenario_blocked", "unsupported"].includes(goal.status));
+  $("clarification-hint").textContent = clarificationItems.length
+    ? `待处理：${clarificationItems.map((goal) => goal.description).join("、")}。请补充事实；不支持的能力不能仅靠补充文字变为可执行。`
+    : "如需补充任务事实，可在此输入并重新编排。";
   const coveredGoalCount = goalItems.filter((goal) => goal.status === "covered").length;
   const matchedGoalCount = goalItems.filter((goal) => goal.status === "capability_matched").length;
   const uncoveredGoalCount = goalItems.length - coveredGoalCount;
   const goalStatusLabels = {
     covered: "已覆盖",
     capability_matched: "能力匹配，未编排",
-    scenario_blocked: "能力存在，当前场景未开放",
+    scenario_blocked: "能力或接口存在，当前场景未开放",
     needs_input: "缺少必要输入",
-    unsupported: "C2能力库不支持",
+    unsupported: "现有仪器或操作不支持",
     uncovered: "本次编排未覆盖",
     pending: "待判定"
   };
@@ -1521,9 +1548,9 @@ function renderReasoningTrace() {
     const coveredBy = (goal.covered_by || []).join("、");
     const candidates = (goal.candidate_operations || []).join("、");
     const details = [];
-    if (status === "covered" && coveredBy) details.push(`覆盖元操作：${coveredBy}`);
-    if (status !== "covered" && candidates) details.push(`候选元操作：${candidates}`);
-    if (goal.reason) details.push(goal.reason);
+    if (status === "covered" && coveredBy) details.push(`对应操作：${(goal.covered_by || []).map((id) => traceOperationName(id, trace)).join("、")}`);
+    if (status !== "covered" && candidates) details.push(`可选操作：${(goal.candidate_operations || []).map((id) => traceOperationName(id, trace)).join("、")}`);
+    if (goal.reason) details.push(traceUserText(goal.reason, trace));
     if (!details.length) details.push(goalStatusLabels[status]);
     return `
       <div class="trace-goal ${status}">
@@ -1535,6 +1562,7 @@ function renderReasoningTrace() {
   };
   const goals = goalItems.map(renderGoal).join("");
   const candidateGoals = scenarioGoals.map(renderGoal).join("");
+  const cotFlow = renderCotDiagram(trace, goalItems, decisionLabels);
   const mappings = (trace.mappings || []).map((mapping) => {
     const inputs = (mapping.inputs || []).map((input) =>
       `${input.name}=${traceDisplayValue(input.value)} ← ${input.source || "无来源"}`
@@ -1549,7 +1577,7 @@ function renderReasoningTrace() {
       </details>`;
   }).join("");
   const validationLabels = {
-    operation_ids_valid: "元操作ID有效",
+    operation_ids_valid: "操作编号有效",
     parameters_complete: "参数与来源完整",
     dependency_chain_closed: "依赖链闭合",
     goal_coverage_complete: "目标覆盖完整",
@@ -1569,12 +1597,117 @@ function renderReasoningTrace() {
   ];
 
   container.innerHTML = `
+    ${cotFlow}
+    <details class="cot-evidence"><summary>查看事实、映射和校验明细</summary>
     <section class="trace-section"><h3>1. 输入事实与来源</h3><div class="trace-facts">${facts || '<span class="muted">无事实</span>'}</div></section>
     <section class="trace-section"><h3>2. 用户目标（已验证覆盖 ${coveredGoalCount}/${goalItems.length}，能力匹配未编排 ${matchedGoalCount}，未验证覆盖 ${uncoveredGoalCount}）</h3><div class="trace-goals">${goals || '<span class="muted">无目标</span>'}</div></section>
     <section class="trace-section"><h3>VD10场景候选操作（仅能力匹配不代表任务可执行）</h3><div class="trace-goals">${candidateGoals || '<span class="muted">无候选操作</span>'}</div></section>
-    <section class="trace-section"><h3>3. C2元操作映射</h3>${mappings || '<div class="trace-empty">尚未形成可验证元操作映射</div>'}</section>
+    <section class="trace-section"><h3>3. 任务对应的操作</h3>${mappings || '<div class="trace-empty">尚未确定对应操作</div>'}</section>
     <section class="trace-section"><h3>4. 操作链内部校验</h3><div class="trace-checks">${validations}</div>${unresolved.length ? `<div class="trace-unresolved">未解决：${escapeHtml(unresolved.join("；"))}</div>` : ""}</section>
-    <section class="trace-decision-card ${decisionClass}"><b>${escapeHtml(decisionLabels[decision.status] || decision.status || "未知状态")}</b><p>${escapeHtml(decision.message || "")}</p></section>`;
+    <section class="trace-decision-card ${decisionClass}"><b>${escapeHtml(decisionLabels[decision.status] || decision.status || "未知状态")}</b><p>${escapeHtml(traceUserText(decision.message, trace))}</p></section></details>`;
+  const diagram = container.querySelector?.(".cot-diagram");
+  if (diagram && diagram.scrollWidth > diagram.clientWidth) {
+    diagram.scrollLeft = (diagram.scrollWidth - diagram.clientWidth) / 2;
+  }
+  if (diagram) bindDiagramHorizontalDrag(diagram);
+}
+
+function bindDiagramHorizontalDrag(diagram) {
+  let drag = null;
+  diagram.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch" || event.button !== 0 || diagram.scrollWidth <= diagram.clientWidth) return;
+    drag = { pointerId: event.pointerId, x: event.clientX, scrollLeft: diagram.scrollLeft };
+    diagram.classList.add("dragging");
+    diagram.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+  diagram.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    diagram.scrollLeft = drag.scrollLeft - (event.clientX - drag.x);
+    event.preventDefault();
+  });
+  const stopDrag = (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag = null;
+    diagram.classList.remove("dragging");
+    if (diagram.hasPointerCapture?.(event.pointerId)) diagram.releasePointerCapture(event.pointerId);
+  };
+  diagram.addEventListener("pointerup", stopDrag);
+  diagram.addEventListener("pointercancel", stopDrag);
+  diagram.addEventListener("lostpointercapture", stopDrag);
+}
+
+function traceOperationName(id, trace) {
+  return metaIndex.get(id)?.name || (trace.mappings || []).find((mapping) => mapping.operation_id === id)?.operation_name || "未登记的操作";
+}
+
+function traceUserText(value, trace) {
+  return String(value || "")
+    .replace(/(?:[a-z][a-z0-9_]*\.)+meta\.[a-z0-9_]+/gi, (id) => traceOperationName(id, trace))
+    .replace(/C2元操作能力库|C2能力库|C2元操作|C2能力|C2/g, "现有仪器与操作")
+    .replace(/元操作/g, "操作");
+}
+
+function renderCotDiagram(trace, goals, decisionLabels) {
+  const center = 380;
+  const crop = (value, limit = 22) => {
+    const text = String(value || "");
+    return escapeHtml(text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
+  };
+  const edge = (x1, y1, x2, y2, label = "", color = "#8fa3c4") =>
+    `<path d="M${x1} ${y1} L${x2} ${y2}" fill="none" stroke="${color}" stroke-width="1.7" marker-end="url(#cot-arrow)"/>${label ? `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 5}" class="cot-edge-label">${label}</text>` : ""}`;
+  const box = (x, y, width, title, detail, state = "candidate") =>
+    `<g class="cot-svg-node ${state}"><title>${escapeHtml(`${title}：${detail}`)}</title><rect x="${x}" y="${y}" width="${width}" height="52" rx="7"/><text x="${x + width / 2}" y="${y + 21}" class="cot-svg-title">${crop(title, 13)}</text><text x="${x + width / 2}" y="${y + 39}" class="cot-svg-detail">${crop(detail, 16)}</text></g>`;
+  const diamond = (y, title, detail) =>
+    `<g class="cot-svg-decision"><title>${escapeHtml(`${title}：${detail}`)}</title><polygon points="${center},${y - 38} ${center + 102},${y} ${center},${y + 38} ${center - 102},${y}"/><text x="${center}" y="${y - 2}" class="cot-svg-title">${crop(title, 15)}</text><text x="${center}" y="${y + 13}" class="cot-svg-detail">${crop(detail, 17)}</text></g>`;
+  const shapes = [box(275, 12, 210, "任务输入", trace.facts?.find((fact) => fact.name === "user_intent")?.value || "当前任务", "start")];
+  const links = [];
+  let nextY = 140;
+  for (const goal of goals) {
+    const y = nextY;
+    links.push(edge(center, y === 140 ? 64 : y - 78, center, y - 40));
+    shapes.push(diamond(y, traceUserText(goal.description, trace), "现有仪器和操作能否完成？"));
+    const matched = ["covered", "capability_matched"].includes(goal.status);
+    const needsInput = goal.status === "needs_input";
+    if (matched) {
+      const candidates = (goal.covered_by?.length ? goal.covered_by : goal.candidate_operations) || [];
+      links.push(edge(center - 104, y, 234, y, "是", "#59ce92"));
+      shapes.push(box(12, y - 26, 220, goal.status === "covered" ? "已匹配所需操作" : "操作支持，待安排", candidates.map((id) => traceOperationName(id, trace)).join("、") || traceUserText(goal.reason, trace), goal.status === "covered" ? "pass" : "candidate"));
+    } else {
+      links.push(edge(center + 104, y, 528, y, "否", needsInput ? "#eacb65" : "#ef7b89"));
+      shapes.push(box(530, y - 26, 218, needsInput ? "需要补充信息" : goal.status === "scenario_blocked" ? "当前流程暂不支持" : "暂时无法完成", traceUserText(goal.reason || goal.description, trace), needsInput ? "warning" : "blocked"));
+    }
+    nextY += 116;
+  }
+  const mappings = trace.mappings || [];
+  const operationY = nextY - 10;
+  links.push(edge(center, goals.length ? nextY - 78 : 64, center, operationY - 2));
+  if (mappings.length) {
+    let previousBottom = operationY;
+    for (const [index, mapping] of mappings.entries()) {
+      const y = operationY + index * 76;
+      if (index > 0) links.push(edge(center, previousBottom, center, y - 2));
+      const operation = metaIndex.get(mapping.operation_id);
+      shapes.push(box(275, y, 210, `${index + 1}. ${traceUserText(mapping.operation_name || traceOperationName(mapping.operation_id, trace), trace)}`, traceUserText(operation?.description || "按顺序完成此操作", trace), trace.decision?.logical_executable ? "pass" : "candidate"));
+      previousBottom = y + 52;
+    }
+    nextY = previousBottom + 72;
+    links.push(edge(center, previousBottom, center, nextY - 40));
+  } else {
+    shapes.push(box(275, operationY, 210, "尚未生成操作步骤", "请确认提示信息后重新生成", "warning"));
+    nextY = operationY + 120;
+    links.push(edge(center, operationY + 52, center, nextY - 40));
+  }
+  shapes.push(diamond(nextY, "整体流程检查", "任务要求、信息与操作顺序"));
+  if (trace.decision?.logical_executable) {
+    links.push(edge(center, nextY + 40, center, nextY + 62, "是", "#59ce92"));
+    shapes.push(box(275, nextY + 64, 210, "流程检查通过", "等待设备与现场条件确认", "pass"));
+  } else {
+    links.push(edge(center + 104, nextY, 528, nextY, "否", "#ef7b89"));
+    shapes.push(box(530, nextY - 26, 218, decisionLabels[trace.decision?.status] || "当前不可执行", traceUserText(trace.decision?.message || "需要补充或调整任务", trace), "blocked"));
+  }
+  const height = nextY + 130;
+  return `<div class="cot-diagram" role="img" aria-label="任务检查与操作步骤流程图"><div class="cot-diagram-canvas"><svg viewBox="0 0 760 ${height}" xmlns="http://www.w3.org/2000/svg"><defs><marker id="cot-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#9aa9c1"/></marker></defs>${links.join("")}${shapes.join("")}</svg></div></div>`;
 }
 
 function traceDisplayValue(value) {

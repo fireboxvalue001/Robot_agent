@@ -5,7 +5,6 @@
   "review_status": "draft",
   "scope": "已完成样品交接的单个样品，执行一次VD10检测并按需读取结果。",
   "required_request_fields": [
-    "sample_id",
     "handoff_confirmed"
   ],
   "boundaries": [

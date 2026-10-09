@@ -121,7 +121,7 @@ MQTT_HISTORY_DIR=
 
 ## 数据与边界
 
-`data/vd10_agent_only_operation_tree.json` 提供 VD10 小操作节点，`data/meta-operations.json` 是界面、任务编排器和交接程序共同使用的唯一元操作能力库。能力库现包含 35 项能力，覆盖 VD10、样品采集、接收登记、恒温、摇匀、过滤、消泡、分装、运输、设备上下料、检测路由和结果读取。格式约束见 `schemas/meta-operation-library.schema.json`，交接说明见 `docs/META_OPERATION_SPEC.md`、`docs/META_OPERATION_CATALOG.md` 和 `docs/META_OPERATION_HANDOFF.md`。
+`data/vd10_agent_only_operation_tree.json` 提供 VD10 小操作节点，`data/meta-operations.json` 是界面、任务编排器和交接程序共同使用的唯一元操作能力库。能力库现包含 41 项能力，覆盖 VD10、样品处理与运输，以及运动黏度仪、颗粒计数仪和 FTIR 的待验证接口。新增仪器操作仅为 `interface_only`，不代表智能规划场景或硬件已接入。格式约束见 `schemas/meta-operation-library.schema.json`，交接说明见 `docs/META_OPERATION_SPEC.md`、`docs/META_OPERATION_CATALOG.md` 和 `docs/META_OPERATION_HANDOFF.md`。
 
 `data/spatial-locations.json` 保存多楼层空间位置注册表，格式约束见 `schemas/spatial-location-library.schema.json`。坐标原点位于一楼墙角，统一使用米。用户提供的一楼送检工作台左下角坐标 `(1.025, 2.93, 0)`，长宽高为 `1.75 / 0.75 / 0.763 m`；VD10 位于三楼并由 `0.76 / 0.63 / 0.70 m` 的小桌支撑。
 

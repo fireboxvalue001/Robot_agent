@@ -6,7 +6,7 @@
 
 ## 必交文件
 
-1. `data/meta-operations.json`：唯一能力库源文件，当前包含35项元操作。
+1. `data/meta-operations.json`：唯一能力库源文件，当前为 `1.4.0`，包含41项元操作。
 2. `schemas/meta-operation-library.schema.json`：能力库格式校验规则。
 3. `data/spatial-locations.json`：位置、楼层和电梯运输链路。
 4. `schemas/spatial-location-library.schema.json`：空间数据格式校验规则。
@@ -37,6 +37,7 @@
 - `draft`：只用于模拟和实机验证准备。
 - `pending_verification`：依据说明书构建，等待设备界面验证。
 - `interface_only`：表示外部设备、人员或软件接口，不允许Agent直接执行。
+- 新增运动黏度仪、颗粒计数仪和 FTIR 各两个元操作，均为 `interface_only`；名称用于能力归类，不表示设备型号、方法、机械接口或结果读取已验证，也不纳入当前 VD10 单样品 AI 编排场景。
 - 人员送样、领样和验收不属于Agent能力。`lab.meta.confirm_sample_handoff` 只接收并保存外部确认。
 - 未登记检测项目统一通过 `instrument.meta.run_registered_project_test` 阻断，不能猜测设备、方法或结果。
 

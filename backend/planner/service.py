@@ -23,6 +23,12 @@ SYSTEM_PROMPT = """你是实验流程逻辑规划器，不是硬件执行器。�
 严格输出JSON：{"steps":[{"operation_id":"已检索ID","evidence_ids":["已提供证据ID"]}],"unresolved_requests":[]}。
 """
 
+OTHER_INSTRUMENT_INTERFACES = {
+    "运动黏度": "viscometer.meta.run_test",
+    "颗粒计数": "particle_counter.meta.run_test",
+    "FTIR": "ftir.meta.acquire_spectrum",
+}
+
 
 def _eligible_entries(store: KnowledgeStore, request: PlannerRequest) -> list[dict]:
     return [
@@ -53,6 +59,8 @@ def _user_goals(store: KnowledgeStore, request: PlannerRequest) -> list[dict]:
     missing = set(intent.missing_fields) if intent else set()
     goals = []
     for name in dict.fromkeys(tests):
+        other_interface = next((operation_id for term, operation_id in OTHER_INSTRUMENT_INTERFACES.items()
+                                if re.search(re.escape(term), name, re.I) and operation_id in store.operations), None)
         incompatible_term = next((term for term in capability["unsupported_examples"] if re.search(re.escape(term), name, re.I)), None)
         declared_standard = re.search(r"(?:ASTM\s*D\s*\d+|GB\s*[/／]?\s*T\s*\d+)", name, re.I)
         standard_supported = not declared_standard or bool(re.fullmatch(r"ASTM\s*D\s*86|GB\s*[/／]?\s*T\s*6536", declared_standard.group(), re.I))
@@ -61,6 +69,8 @@ def _user_goals(store: KnowledgeStore, request: PlannerRequest) -> list[dict]:
         ))
         if name == "检测目标待明确":
             status, reason = "needs_input", "未明确检测项目或目标仪器，无法证明VD10流程满足任务。"
+        elif other_interface:
+            status, reason = "scenario_blocked", f"检测项目“{name}”在C2中仅有其他仪器的待接入接口；当前VD10单样品智能场景不能调用该接口或宣称检测已执行。"
         elif incompatible_term or not standard_supported:
             status, reason = "unsupported", f"检测项目“{name}”与已登记VD10蒸馏能力不匹配，需要重新路由或核对检测标准。"
         elif not compatible:
@@ -77,7 +87,7 @@ def _user_goals(store: KnowledgeStore, request: PlannerRequest) -> list[dict]:
             "origin": "user_request",
             "status": status,
             "covered_by": [],
-            "candidate_operations": ["vd10.meta.sample_test"] if compatible else [],
+            "candidate_operations": [other_interface] if other_interface else (["vd10.meta.sample_test"] if compatible else []),
             "reason": reason,
         })
     if intent and intent.sample_count and intent.sample_count > 1:
@@ -348,9 +358,8 @@ def _verify_grounded_plan(
             continue
         goal = goal_by_operation.get(step["operation_id"])
         if goal:
-            goal["status"] = "covered"
-            goal["covered_by"] = [step["operation_id"]]
-            goal["reason"] = "模型候选包含该操作，且已通过C2元操作、参数、依赖和证据校验。"
+            goal["status"] = "capability_matched"
+            goal["reason"] = "模型候选包含该操作，等待参数、依赖和证据校验。"
         required_inputs = set(operation["inputs"].get("required", []))
         mappings.append({
             "goal_id": goal["goal_id"] if goal else None,
@@ -376,12 +385,21 @@ def _verify_grounded_plan(
         })
     trace["mappings"] = mappings
     internal_valid = all((operation_ids_valid, parameters_complete, dependency_chain_closed, ordering_valid, evidence_valid))
+    if internal_valid:
+        for goal in trace["goals"]:
+            if goal["origin"] == "scenario_required" and goal["status"] == "capability_matched":
+                goal["status"] = "covered"
+                goal["covered_by"] = goal["candidate_operations"]
+                goal["reason"] = "候选操作已通过C2元操作、参数、依赖和证据校验。"
     for goal in trace["goals"]:
         if goal["origin"] == "user_request" and goal["status"] == "pending":
             if "vd10.meta.sample_test" in operation_ids and internal_valid:
                 goal["status"] = "covered"
                 goal["covered_by"] = ["vd10.meta.sample_test"]
                 goal["reason"] = "检测项目属于已登记VD10能力范围，且候选检测操作通过校验。"
+            elif "vd10.meta.sample_test" in operation_ids:
+                goal["status"] = "capability_matched"
+                goal["reason"] = "检测能力匹配，但操作链仍缺少必要参数或校验未完成。"
             else:
                 goal["status"] = "uncovered"
                 goal["reason"] = "候选操作链未包含VD10样品检测。"
@@ -551,7 +569,12 @@ class PlannerService:
             }
             values.update(entry.get("constant_bindings", {}))
             errors = list(Draft202012Validator(operation["inputs"]).iter_errors(values))
-            if errors:
+            deferrable_sample_id = parameters.get("sample_id") is None and all(
+                error.validator == "required"
+                and set(error.validator_value) - set(values) == {"sample_id"}
+                for error in errors
+            )
+            if errors and not deferrable_sample_id:
                 result["steps"] = []
                 return finish(
                     "needs_input", "INVALID_OPERATION_INPUT", "输入不满足元操作字段约束。",
@@ -588,6 +611,12 @@ class PlannerService:
 
         result["evidence"] = [store.evidence[key] for key in sorted(used_evidence)]
         validation = _verify_grounded_plan(store, request, result["steps"], reasoning_trace)
+        if parameters.get("sample_id") is None:
+            return finish(
+                "needs_input", "DEFERRED_SAMPLE_ID",
+                "候选元操作链已生成；样品编号待补充，当前不能确认参数完整或进入执行。",
+                fields=["sample_id"],
+            )
         if unresolved_items:
             result["steps"] = []
             return finish(

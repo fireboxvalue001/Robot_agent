@@ -5,8 +5,18 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const plannerCss = fs.readFileSync(path.join(root, "planner-controls.css"), "utf8");
 const elements = new Map();
 const windowListeners = new Map();
+let lastIntelligentRequest = null;
+const diagramStub = {
+  scrollWidth: 900,
+  clientWidth: 600,
+  scrollLeft: 0,
+  listeners: {},
+  classList: { add() {}, remove() {} },
+  addEventListener(type, listener) { this.listeners[type] = listener; }
+};
 
 function makeElement(id) {
   return {
@@ -22,7 +32,8 @@ function makeElement(id) {
     listeners: {},
     className: "",
     classList: { add() {}, remove() {}, toggle() {} },
-    addEventListener(type, listener) { this.listeners[type] = listener; }
+    addEventListener(type, listener) { this.listeners[type] = listener; },
+    querySelector(selector) { return id === "reasoning-trace" && selector === ".cot-diagram" ? diagramStub : null; }
   };
 }
 
@@ -31,8 +42,9 @@ function makeElement(id) {
   "operation-count", "operation-library", "semantic-flow", "physical-flow",
   "semantic-state", "physical-state", "intent-summary", "intent-state",
   "tab-status", "tab-results", "toast", "spatial-location-count", "spatial-location-list",
-  "planner-mode", "planner-sample-id", "planner-operator",
-  "planner-handoff-confirmed", "planner-read-results"
+  "planner-mode",
+  "planner-handoff-confirmed", "planner-read-results", "clarification-input",
+  "clarification-submit", "clarification-hint"
 ].forEach((id) => elements.set(id, makeElement(id)));
 
 global.document = {
@@ -63,6 +75,8 @@ global.CustomEvent = class CustomEvent {
 global.fetch = async (resource, options = {}) => {
   if (String(resource).includes("/api/planner/plan")) {
     const request = JSON.parse(options.body || "{}");
+    lastIntelligentRequest = request;
+    const sampleDeferred = !request.parameters.sample_id;
     const operationIds = request.read_results === false
       ? [
           "robot.meta.receive_and_register_sample",
@@ -83,12 +97,12 @@ global.fetch = async (resource, options = {}) => {
         schema_version: "0.2.0",
         plan_id: "plan_ui-test",
         workflow_id: request.workflow_id,
-        status: "logical_pass",
+        status: sampleDeferred ? "needs_input" : "logical_pass",
         physical_status: "not_evaluated",
         execution_allowed: false,
         knowledge: {
           source_library_id: "autolab.vd10.meta_operations",
-          source_library_version: "1.3.0",
+          source_library_version: "1.4.0",
           sha256: "test"
         },
         steps: operationIds.map((operationId, index) => ({
@@ -96,11 +110,13 @@ global.fetch = async (resource, options = {}) => {
           operation_id: operationId,
           operation_version: "1.0.0",
           parameters: operationId === "robot.meta.receive_and_register_sample"
-            ? { sample_id: request.parameters.sample_id, handoff_confirmed: true }
+            ? { ...(sampleDeferred ? {} : { sample_id: request.parameters.sample_id }), handoff_confirmed: true }
             : {},
           depends_on: index ? [`smart_${index}`] : []
         })),
-        issues: [{ code: "LOGICAL_ONLY", message: "logical only" }],
+        issues: sampleDeferred
+          ? [{ code: "DEFERRED_SAMPLE_ID", message: "候选链已生成，样品编号待补充", fields: ["sample_id"] }]
+          : [{ code: "LOGICAL_ONLY", message: "logical only" }],
         generation: {
           runtime: request.model_mode === "deepseek" ? "deepseek_api" : "deterministic",
           network_inference: request.model_mode === "deepseek",
@@ -117,8 +133,8 @@ global.fetch = async (resource, options = {}) => {
             goal_id: `G${index + 1}`,
             description: operationId,
             origin: "scenario_required",
-            status: "covered",
-            covered_by: [operationId],
+            status: sampleDeferred ? "capability_matched" : "covered",
+            covered_by: sampleDeferred ? [] : [operationId],
             candidate_operations: [operationId],
             reason: `由元操作 ${operationId} 覆盖。`
           })),
@@ -134,9 +150,9 @@ global.fetch = async (resource, options = {}) => {
           })),
           validation: {
             operation_ids_valid: true,
-            parameters_complete: true,
+            parameters_complete: !sampleDeferred,
             dependency_chain_closed: true,
-            goal_coverage_complete: true,
+            goal_coverage_complete: !sampleDeferred,
             ordering_valid: true,
             evidence_valid: true,
             unresolved_goals: [],
@@ -144,8 +160,8 @@ global.fetch = async (resource, options = {}) => {
             unsupported_operations: []
           },
           decision: {
-            status: "PHYSICAL_PENDING",
-            logical_executable: true,
+            status: sampleDeferred ? "NEEDS_INPUT" : "PHYSICAL_PENDING",
+            logical_executable: !sampleDeferred,
             physical_executable: null,
             message: "C2元操作组合校验通过，等待物理可执行确认。"
           }
@@ -200,7 +216,10 @@ setTimeout(async () => {
   const parseButton = elements.get("parse-intent");
   const defaultText = elements.get("intent-input").value;
 
-  assert(elements.get("operation-count").textContent === "35 项", "the interface should show all 35 meta operations");
+  assert(elements.get("operation-count").textContent === "41 项", "the interface should show all 41 meta operations");
+  assert(elements.get("operation-library").innerHTML.includes("运动黏度测定仪"), "viscometer group should be visible");
+  assert(elements.get("operation-library").innerHTML.includes("颗粒计数仪"), "particle counter group should be visible");
+  assert(elements.get("operation-library").innerHTML.includes("FTIR光谱采集接口"), "FTIR capability should be visible");
   assert(elements.get("operation-library").innerHTML.includes("样品定时加热"), "heating operation should be visible in the library");
   assert(elements.get("operation-library").innerHTML.includes("样品摇匀混合"), "mixing operation should be visible in the library");
   assert(elements.get("operation-library").innerHTML.includes("样品定时静置"), "holding operation should be visible in the library");
@@ -413,11 +432,18 @@ setTimeout(async () => {
   assert(semantic.innerHTML.includes("lab.location.vd10_station"), "transfer should use the VD10 location id");
 
   elements.get("planner-mode").value = "deterministic";
-  elements.get("planner-sample-id").value = "sample-ui-001";
   elements.get("planner-handoff-confirmed").checked = true;
   elements.get("planner-read-results").checked = true;
+  assert(!indexHtml.includes('id="planner-sample-id"'), "C1 should not require a dedicated sample-id field");
+  assert(!indexHtml.includes('id="planner-operator"'), "C1 should not require a dedicated operator field");
   setIntent("将已交接样品送入VD10检测并读取结果");
   await parseButton.listeners.click();
+  assert(lastIntelligentRequest.parameters.sample_id === null, "AI planning should accept a missing sample ID for candidate planning");
+  assert(elements.get("reasoning-trace").innerHTML.includes("cap:vd10.meta.sample_test"), "a missing sample ID should still show candidate mappings");
+  assert(!semantic.innerHTML.includes("样品接收与信息登记"), "incomplete candidate chain must not become an executable workflow");
+  setIntent("样品编号为sample-ui-001，将已交接样品送入VD10检测并读取结果");
+  await parseButton.listeners.click();
+  assert(lastIntelligentRequest.parameters.sample_id === "sample-ui-001", "sample ID should be read from task text");
   assert(semantic.innerHTML.includes("样品接收与信息登记"), "intelligent planning should render sample registration");
   assert(semantic.innerHTML.includes("VD10测试信息准备"), "intelligent planning should render VD10 preparation");
   assert(semantic.innerHTML.includes("VD10样品检测"), "intelligent planning should render VD10 testing");
@@ -425,10 +451,55 @@ setTimeout(async () => {
   assert(semantic.innerHTML.includes("非联网仪器屏幕数据读取"), "intelligent planning should render robot result reading");
   assert(elements.get("physical-flow").innerHTML.includes("等待外部物理可执行确认"), "intelligent plans must wait for physical validation");
   assert(elements.get("intent-summary").innerHTML.includes("模型运行时：deterministic"), "planner runtime should be visible");
-  assert(elements.get("reasoning-decision").textContent.includes("逻辑通过"), "verified reasoning decision should be visible");
-  assert(elements.get("reasoning-trace").innerHTML.includes("元操作ID有效：通过"), "independent validation checks should be visible");
+  assert(elements.get("reasoning-decision").textContent.includes("流程检查通过"), "verified reasoning decision should be visible");
+  assert(elements.get("reasoning-trace").innerHTML.includes("操作编号有效：通过"), "independent validation checks should be visible");
   assert(elements.get("reasoning-trace").innerHTML.includes("request.parameters.sample_id"), "parameter provenance should be visible");
   assert(elements.get("reasoning-trace").innerHTML.includes("cap:vd10.meta.sample_test"), "capability evidence should be visible");
+  assert(elements.get("reasoning-trace").innerHTML.includes('class="cot-diagram"'), "C3 should show the SVG flowchart");
+  assert(elements.get("reasoning-trace").innerHTML.includes('class="cot-diagram-canvas"'), "flowchart should use a centered canvas");
+  const userDiagram = elements.get("reasoning-trace").innerHTML.split('<details class="cot-evidence">')[0];
+  assert(!/C2|元操作|(?:vd10|robot)\.meta\./.test(userDiagram), "user flowchart should show operation names instead of internal terminology and IDs");
+  assert(userDiagram.includes("VD10样品检测"), "flowchart should identify the instrument and operation");
+  assert(userDiagram.includes("进入测试界面"), "operation nodes should explain what will happen");
+  assert(userDiagram.includes('M380 64 L380 128'), "task input should connect directly to the first operation when there are no separate user-goal checks");
+  const initialScroll = diagramStub.scrollLeft;
+  diagramStub.listeners.pointerdown({ pointerType: "mouse", button: 0, pointerId: 1, clientX: 100, preventDefault() {} });
+  diagramStub.listeners.pointermove({ pointerId: 1, clientX: 60, preventDefault() {} });
+  assert(diagramStub.scrollLeft === initialScroll + 40, "dragging the diagram should pan horizontally");
+  diagramStub.listeners.pointerup({ pointerId: 1 });
+  diagramStub.listeners.pointermove({ pointerId: 1, clientX: 20, preventDefault() {} });
+  assert(diagramStub.scrollLeft === initialScroll + 40, "horizontal panning should stop on pointer release");
+  assert(/\.cot-diagram\s*\{[^}]*width:\s*100%/s.test(plannerCss), "flowchart viewport should fill C3 width");
+  assert(/\.cot-diagram\s*\{[^}]*height:\s*clamp\(420px,\s*60vh,\s*620px\)/s.test(plannerCss), "flowchart viewport should show more of the task chain");
+  assert(/\.cot-diagram svg\s*\{[^}]*width:\s*min\(100%,\s*680px\)/s.test(plannerCss), "SVG nodes should stay compact on wide screens");
+  assert(/\.cot-diagram-canvas\s*\{[^}]*justify-items:\s*center/s.test(plannerCss), "diagram canvas should center the SVG");
+  assert(/\.cot-diagram-canvas\s*\{[^}]*width:\s*calc\(100% \+ 240px\)/s.test(plannerCss), "diagram should have horizontal drag room even on wide screens");
+  assert(elements.get("reasoning-trace").innerHTML.includes('class="cot-svg-decision"'), "C3 should show decision diamonds");
+  assert(elements.get("reasoning-trace").innerHTML.includes("marker-end=\"url(#cot-arrow)\""), "C3 should show directed edges");
+  window.dispatchEvent(new CustomEvent("autolab:planner-result", { detail: {
+    status: "failed", warnings: ["等待补充"], plannerMetadata: { reasoningTrace: {
+      facts: [{ name: "user_intent", value: "VD10蒸馏并送至其他仪器" }],
+      goals: [
+        { goal_id: "U01", description: "VD10蒸馏", origin: "user_request", status: "capability_matched", candidate_operations: ["vd10.meta.sample_test"], covered_by: [] },
+        { goal_id: "U02", description: "其他仪器检测", origin: "user_request", status: "needs_input", candidate_operations: [], covered_by: [], reason: "目标仪器未指定" }
+      ], mappings: [], validation: {}, decision: { status: "NEEDS_INPUT", logical_executable: false, message: "目标仪器未指定" }
+    } }
+  } }));
+  assert(elements.get("reasoning-trace").innerHTML.includes("操作支持，待安排"), "matched branch should remain visible when another goal fails");
+  assert(elements.get("reasoning-trace").innerHTML.includes("目标仪器未指定"), "missing-input branch should show the blocker");
+  assert(elements.get("reasoning-trace").innerHTML.includes("尚未生成操作步骤"), "unmapped capabilities must not become an execution chain");
+  const clarificationText = "对已交接样品进行蒸馏检测";
+  setIntent(clarificationText);
+  dispatchSemantic(clarificationText, {
+    requested_tests: { type: "string", value: "蒸馏特性" },
+    sample_id: { type: "string", value: "sample-ui-001" }
+  }, { needed: true, missingFields: ["target_device"] });
+  elements.get("clarification-input").value = "目标仪器是VD10";
+  await elements.get("clarification-submit").listeners.click();
+  assert(lastIntelligentRequest.task_intent.requested_tests[0] === "蒸馏特性", "clarification must preserve upstream test fields");
+  assert(lastIntelligentRequest.task_intent.target_device === "VD10", "clarification should confirm the device");
+  assert(!lastIntelligentRequest.task_intent.missing_fields.includes("target_device"), "resolved device must leave missing-fields list");
+  assert(lastIntelligentRequest.text.includes("补充信息：目标仪器是VD10"), "clarification should be submitted with the original task");
   elements.get("planner-mode").value = "rules";
 
   const externalText = "将样品分成2份送到VD10检测";
@@ -454,7 +525,7 @@ setTimeout(async () => {
       experimentName: "VD10检测", steps: [], parameters: {}, timestamp: Date.now(),
       operationChain: {
         contractVersion: "1.0.0", planId: "plan_external",
-        capabilityLibrary: { id: "autolab.vd10.meta_operations", version: "1.3.0", checksum: "sha256:test" },
+        capabilityLibrary: { id: "autolab.vd10.meta_operations", version: "1.4.0", checksum: "sha256:test" },
         operations: [
           {
             stepId: "external_001", sequence: 1, metaOperationId: "robot.meta.aliquot_sample",

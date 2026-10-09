@@ -1,3 +1,136 @@
+.intent-panel .intent-row {
+  display: grid;
+  gap: 12px;
+}
+
+.intent-panel .intent-input-wrap textarea {
+  min-height: 106px;
+}
+
+.intent-panel .intent-actions {
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+}
+
+.intent-actions > .button,
+.intent-actions .voice-actions > .button {
+  width: 100%;
+}
+
+.intent-actions .planner-mode-label {
+  grid-column: 1 / -1;
+  margin: 6px 0 -6px;
+}
+
+.intent-actions .planner-mode-select {
+  grid-column: span 2;
+}
+
+.intent-actions .planner-request-settings {
+  width: 100%;
+  grid-column: span 2;
+}
+
+.intent-actions #parse-intent {
+  grid-column: 3 / -1;
+}
+
+.intent-actions .voice-status,
+.intent-actions .document-intent-status,
+.intent-actions .mqtt-status {
+  max-width: none;
+  min-height: 0;
+  font-size: 11px;
+  align-self: center;
+}
+
+.intent-clarification {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #344056;
+  border-radius: 9px;
+  background: #101722;
+}
+
+.intent-clarification strong,
+.intent-clarification small {
+  display: block;
+}
+
+.intent-clarification small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.clarification-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: end;
+  margin: 8px 0;
+}
+
+.clarification-entry textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  background: #0c0f15;
+  border: 1px solid #3a4351;
+  border-radius: 7px;
+  padding: 9px;
+  color: var(--text);
+  font: inherit;
+}
+
+.cot-diagram {
+  overflow: auto;
+  cursor: grab;
+  user-select: none;
+  width: 100%;
+  height: clamp(420px, 60vh, 620px);
+  margin: 4px 0 12px;
+  border: 1px solid #34405b;
+  border-radius: 9px;
+  background: #111827;
+}
+
+.cot-diagram.dragging { cursor: grabbing; }
+
+.cot-diagram-canvas {
+  display: grid;
+  justify-items: center;
+  width: calc(100% + 240px);
+  min-width: 760px;
+}
+
+.cot-diagram svg {
+  display: block;
+  width: min(100%, 680px);
+  height: auto;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+.cot-svg-node rect { fill: #1b2b42; stroke: #7caaf0; stroke-width: 2; }
+.cot-svg-node.start rect { fill: #262044; stroke: #a78cff; }
+.cot-svg-node.pass rect { fill: #173a31; stroke: #54d699; }
+.cot-svg-node.warning rect { fill: #3b331d; stroke: #eacb65; }
+.cot-svg-node.blocked rect { fill: #3b222b; stroke: #ef7b89; }
+.cot-svg-decision polygon { fill: #292443; stroke: #a78cff; stroke-width: 2; }
+.cot-svg-title { fill: #f0f2fa; font-size: 13px; font-weight: 700; text-anchor: middle; }
+.cot-svg-detail { fill: #b8c6db; font-size: 11px; text-anchor: middle; }
+.cot-edge-label { fill: #dce5f7; font-size: 11px; text-anchor: middle; }
+.cot-evidence > summary { cursor: pointer; color: #c1b0e9; padding: 7px; border-top: 1px solid #3d3560; }
+
+@media (max-width: 760px) {
+  .intent-panel .intent-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .intent-actions .planner-mode-select,
+  .intent-actions .planner-request-settings,
+  .intent-actions #parse-intent { grid-column: 1 / -1; }
+  .clarification-entry { grid-template-columns: 1fr; }
+}
+
 .planner-mode-label {
   display: block;
   color: var(--muted);
@@ -5,8 +138,7 @@
   margin: 5px 0 3px;
 }
 
-.planner-mode-select,
-.planner-request-settings input[type="text"] {
+.planner-mode-select {
   width: 100%;
   background: #0b0e14;
   border: 1px solid #3a4351;
@@ -33,10 +165,6 @@
 .planner-request-settings > label {
   display: block;
   padding: 5px 9px;
-}
-
-.planner-request-settings input[type="text"] {
-  margin-top: 3px;
 }
 
 .planner-request-settings .planner-check {
@@ -102,8 +230,7 @@
 }
 
 .reasoning-trace {
-  max-height: 520px;
-  overflow: auto;
+  overflow: visible;
   padding: 0 10px 10px;
 }
 
