@@ -10,21 +10,24 @@
 
 ## 2. 能力查询接口
 
-本项目启动后提供两个只读HTTP接口：
+本项目启动后提供以下只读HTTP接口：
 
 ```text
 GET http://<UI主机>:8877/api/v1/capabilities/meta-operations
 GET http://<UI主机>:8877/api/v1/capabilities/spatial-locations
+GET http://<UI主机>:8877/api/v1/capabilities/action-templates
 ```
 
 元操作响应包含 `libraryId`、`libraryVersion`、`checksum`、分类、仪器、前置条件和 `metaOperations`。空间响应包含统一坐标系、楼层、位置及运输链路。
+
+组合示例接口返回 `recipes`，仅提供单步动作的参考顺序，不属于元操作列表，也不是可直接执行的操作链。编排方仍需绑定参数、处理分支并校验前置条件。新单步动作标记 `extensions.operation_granularity: single_action`，操作树仅含一个节点；旧多步接口为兼容保留，界面标为“历史组合”。
 
 同事B编排前保存这三个值：
 
 ```json
 {
   "id": "autolab.vd10.meta_operations",
-  "version": "1.4.0",
+  "version": "1.7.1",
   "checksum": "sha256:..."
 }
 ```
@@ -32,6 +35,8 @@ GET http://<UI主机>:8877/api/v1/capabilities/spatial-locations
 并原样写入 `operationChain.capabilityLibrary`。任意一项与UI当前能力库不一致，规划结果都会被拒绝，避免使用过期ID。
 
 ## 2.1 本地自然语言编排接口
+
+油脂提取使用独立版本的本地条件流程，详见 `docs/LEATHER_EXTRACTION.md`。结果放在本地 `/api/planner/plan` 的 `workflow_definition` 中，不修改下述MQTT协议，也不转换为线性 `operationChain`。
 
 在同事 A/B 的完整服务就绪前，UI 可以直接把自然语言交给本项目的独立编排接口：
 

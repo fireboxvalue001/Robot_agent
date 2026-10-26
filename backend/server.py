@@ -16,6 +16,7 @@ from .document_intent.router import router as document_intent_router
 from .document_intent.service import runtime_status as document_intent_runtime_status
 from .mqtt_service import mqtt_service
 from .planning_service import plan_natural_language
+from .local_semantic_adapter import resolve_local_semantic
 from .planner.router import planner_runtime_status, router as planner_router
 from .realtime_asr_service import (
     RealtimeAsrConfigurationError,
@@ -35,10 +36,13 @@ MAX_AUDIO_SIZE = 3 * 1024 * 1024
 META_OPERATION_LIBRARY = FRONTEND_DIR / "data" / "meta-operations.json"
 SPATIAL_LOCATION_LIBRARY = FRONTEND_DIR / "data" / "spatial-locations.json"
 PUBLIC_ASSETS = {
+    "extraction-flow.js", "extraction-flow.css",
     "app.js", "document-intent.js", "index.html", "meta-operation.css", "mqtt-input.js",
     "planner-controls.css", "styles.css", "voice-input.js",
 }
 PUBLIC_DATA_FILES = {
+    "leather-extraction-resources.json",
+    "robot-action-templates.json",
     "meta-operations.json", "spatial-locations.json", "vd10_agent_only_operation_tree.json",
 }
 
@@ -123,9 +127,27 @@ def get_spatial_location_capabilities() -> dict:
     return capability_snapshot(SPATIAL_LOCATION_LIBRARY, "locations")
 
 
+@app.get("/api/v1/capabilities/action-templates")
+def get_robot_action_templates() -> dict:
+    raw = (FRONTEND_DIR / "data/robot-action-templates.json").read_bytes()
+    data = json.loads(raw.decode("utf-8"))
+    return {"libraryId": data["library_id"], "libraryVersion": data["library_version"],
+            "checksum": "sha256:" + hashlib.sha256(raw).hexdigest(), "kind": data["kind"],
+            "notice": data["notice"], "recipes": data["recipes"]}
+
+
 @app.post("/api/v1/planning/from-text")
 def plan_from_natural_language(request: NaturalLanguagePlanningRequest) -> dict:
     return plan_natural_language(request.text, workflow_id=request.workflowId)
+
+
+@app.post("/api/v1/planning/from-semantic")
+@app.post("/api/v1/intent/from-semantic")
+def plan_from_local_semantic(payload: dict) -> dict:
+    try:
+        return resolve_local_semantic(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/asr/transcribe")

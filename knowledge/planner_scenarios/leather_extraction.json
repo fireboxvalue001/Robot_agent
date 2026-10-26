@@ -1,0 +1,5256 @@
+{
+  "knowledge_id": "autolab.planner.leather_fat_extraction",
+  "version": "0.3.0",
+  "scenario_id": "leather_fat_extraction",
+  "review_status": "draft",
+  "source": "油脂提取实验流程.docx及用户2026-10-26补充的30次回流与蒸馏冷凝回收四步方案",
+  "scope": "按用户文档与补充方案编排皮革二氯甲烷索氏抽提、水分测定、恒重、至少30次回流后的蒸馏冷凝回收与干基含量计算；不执行硬件。",
+  "default_solvent_removal_method_id": "dcm_distillation_recovery_v1",
+  "name": "皮革油脂抽提",
+  "entry": "start",
+  "phases": [
+    {
+      "id": "preparation",
+      "label": "1. 样品处理与环境检查",
+      "exception": false
+    },
+    {
+      "id": "weighing",
+      "label": "2. 称量瓶恒重",
+      "exception": false,
+      "diagram": {
+        "shape": "decision",
+        "subtitle": "连续两次质量差小于阈值？",
+        "repeat_lines": [
+          "否：再次干燥",
+          "冷却、称量"
+        ],
+        "limit_ref": "max_cycles"
+      }
+    },
+    {
+      "id": "moisture",
+      "label": "3. 测定样品水分",
+      "exception": false
+    },
+    {
+      "id": "sample",
+      "label": "4. 制备抽提试样",
+      "exception": false
+    },
+    {
+      "id": "empty",
+      "label": "5. 空抽提瓶恒重",
+      "exception": false,
+      "diagram": {
+        "shape": "decision",
+        "subtitle": "连续两次质量差小于阈值？",
+        "repeat_lines": [
+          "否：再次干燥",
+          "冷却、称量"
+        ],
+        "limit_ref": "max_cycles"
+      }
+    },
+    {
+      "id": "assembly",
+      "label": "6. 加液与装置组装",
+      "exception": false
+    },
+    {
+      "id": "extraction",
+      "label": "7. 索氏抽提与过程监测",
+      "exception": false,
+      "diagram": {
+        "subtitle": "完整回流至少{{minimum_reflux_cycles}}次；超时停止复核"
+      }
+    },
+    {
+      "id": "disassembly",
+      "label": "8. 冷却与拆卸",
+      "exception": false
+    },
+    {
+      "id": "recovery",
+      "label": "9. 蒸馏冷凝回收与残留检查",
+      "exception": false
+    },
+    {
+      "id": "final",
+      "label": "10. 抽提后恒重",
+      "exception": false,
+      "diagram": {
+        "shape": "decision",
+        "subtitle": "连续两次质量差小于阈值？",
+        "repeat_lines": [
+          "否：再次干燥",
+          "冷却、称量"
+        ],
+        "limit_ref": "max_cycles"
+      }
+    },
+    {
+      "id": "result",
+      "label": "11. 含量计算与结果汇总",
+      "exception": false
+    },
+    {
+      "id": "exceptions",
+      "label": "异常停止与人工复核",
+      "exception": true
+    }
+  ],
+  "resource_file": "data/leather-extraction-resources.json",
+  "method_requirements": [
+    {
+      "id": "solvent_removal_method",
+      "collection": "solvent_removal_methods",
+      "selection_label": "溶剂去除方法",
+      "default_id": "dcm_distillation_recovery_v1",
+      "constraints": {
+        "solvent": "dichloromethane"
+      },
+      "clarification": {
+        "described_label": "已说明：蒸馏冷凝回收；设备、条件及标准待确认",
+        "missing_label": "指定溶剂去除方法需登记审核",
+        "described_instruction": "四步实际做法已保存并进入流程，不需要重复说明或自己编造方法ID。至少30次回流为抽提完成门槛；观察到蒸馏停止只是阶段性结束参考，不证明无溶剂残留。",
+        "missing_instruction": "请核对输入的方法ID，或说明实际做法供维护者登记。",
+        "review_notice": "维护者需根据现场设备和适用标准审核，方法描述不自动授权实机执行。",
+        "format": "可以补充设备型号、运行条件、适用标准名称及版本；未知项保留待确认。"
+      }
+    }
+  ],
+  "limits": {
+    "loop_limit_parameter": "max_cycles",
+    "on_limit": "stop_and_request_review",
+    "on_timeout": "stop_and_request_review"
+  },
+  "parameters": {
+    "cut_size_cm": {
+      "label": "皮革切块边长",
+      "unit": "cm",
+      "minimum": 0.1,
+      "maximum": 10,
+      "anchors": [
+        "切块",
+        "皮革"
+      ],
+      "integer": false,
+      "default": 3,
+      "document_quote": "将待测皮革剪成约3 cm × 3 cm的小块"
+    },
+    "max_cut_actions": {
+      "label": "剪切最大次数",
+      "unit": "次",
+      "minimum": 1,
+      "maximum": 200,
+      "anchors": [
+        "剪切"
+      ],
+      "integer": true
+    },
+    "sample_dry_temperature_c": {
+      "label": "水分测定干燥温度",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 300,
+      "anchors": [
+        "水分"
+      ],
+      "integer": false
+    },
+    "sample_dry_minutes": {
+      "label": "水分测定干燥时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 10080,
+      "anchors": [
+        "水分"
+      ],
+      "integer": false
+    },
+    "oven_temperature_c": {
+      "label": "容器干燥温度",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 300,
+      "anchors": [
+        "容器",
+        "称量瓶"
+      ],
+      "integer": false,
+      "default": 105,
+      "document_quote": "称量瓶放入105℃烘箱中干燥"
+    },
+    "initial_dry_minutes": {
+      "label": "容器首次干燥时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 10080,
+      "anchors": [
+        "首次",
+        "称量瓶"
+      ],
+      "integer": false,
+      "default": 360,
+      "document_quote": "称量瓶干燥约6 h"
+    },
+    "repeat_dry_minutes": {
+      "label": "容器重复干燥时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 1440,
+      "anchors": [
+        "再次",
+        "重复"
+      ],
+      "integer": false,
+      "default": 60,
+      "document_quote": "再次将称量瓶放回烘箱中干燥约1 h"
+    },
+    "cool_minutes": {
+      "label": "干燥器冷却时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 1440,
+      "anchors": [
+        "干燥器",
+        "冷却"
+      ],
+      "integer": false,
+      "default": 30,
+      "document_quote": "干燥器中冷却约30 min"
+    },
+    "weighing_threshold_mg": {
+      "label": "称量瓶恒重阈值",
+      "unit": "mg",
+      "minimum": 0.01,
+      "maximum": 1000,
+      "anchors": [
+        "称量瓶"
+      ],
+      "integer": false,
+      "default": 5,
+      "document_quote": "连续两次称量质量差小于5 mg"
+    },
+    "empty_threshold_mg": {
+      "label": "空抽提瓶恒重阈值",
+      "unit": "mg",
+      "minimum": 0.01,
+      "maximum": 1000,
+      "anchors": [
+        "空抽提瓶"
+      ],
+      "integer": false
+    },
+    "empty_dry_temperature_c": {
+      "label": "空抽提瓶干燥温度",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 300,
+      "anchors": [
+        "空抽提瓶"
+      ],
+      "integer": false
+    },
+    "empty_initial_dry_minutes": {
+      "label": "空抽提瓶首次干燥时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 10080,
+      "anchors": [
+        "空抽提瓶"
+      ],
+      "integer": false
+    },
+    "empty_repeat_dry_minutes": {
+      "label": "空抽提瓶重复干燥时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 1440,
+      "anchors": [
+        "空抽提瓶"
+      ],
+      "integer": false
+    },
+    "final_threshold_mg": {
+      "label": "最终恒重阈值",
+      "unit": "mg",
+      "minimum": 0.01,
+      "maximum": 1000,
+      "anchors": [
+        "最终"
+      ],
+      "integer": false
+    },
+    "sample_target_g": {
+      "label": "抽提取样目标质量",
+      "unit": "g",
+      "minimum": 0.01,
+      "maximum": 1000,
+      "anchors": [
+        "取样",
+        "抽提样品"
+      ],
+      "integer": false,
+      "default": 5,
+      "document_quote": "取约5 g左右皮革样品；实际质量以称量结果为准"
+    },
+    "solvent_ml": {
+      "label": "二氯甲烷用量",
+      "unit": "mL",
+      "minimum": 0.01,
+      "maximum": 10000,
+      "anchors": [
+        "二氯甲烷"
+      ],
+      "integer": false
+    },
+    "bath_temperature_c": {
+      "label": "抽提水浴温度",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 100,
+      "anchors": [
+        "水浴"
+      ],
+      "integer": false
+    },
+    "minimum_reflux_cycles": {
+      "label": "最低回流循环次数",
+      "unit": "次",
+      "minimum": 30,
+      "maximum": 10000,
+      "anchors": [
+        "回流"
+      ],
+      "integer": true,
+      "default": 30,
+      "document_quote": "用户补充：按规定完成至少30次溶剂回流循环后，停止加热",
+      "default_source": "user_supplement"
+    },
+    "extraction_timeout_hours": {
+      "label": "抽提最长允许时长",
+      "unit": "h",
+      "minimum": 0.1,
+      "maximum": 168,
+      "anchors": [
+        "抽提"
+      ],
+      "integer": false
+    },
+    "recovery_temperature_c": {
+      "label": "蒸馏回收加热温度",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 200,
+      "anchors": [
+        "蒸馏",
+        "回收"
+      ],
+      "integer": false
+    },
+    "monitor_minutes": {
+      "label": "回流检查间隔",
+      "unit": "min",
+      "minimum": 0.1,
+      "maximum": 60,
+      "anchors": [
+        "回流",
+        "检查间隔"
+      ],
+      "integer": false
+    },
+    "cool_limit_c": {
+      "label": "允许拆卸温度上限",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 100,
+      "anchors": [
+        "拆卸"
+      ],
+      "integer": false
+    },
+    "max_cycles": {
+      "label": "恒重最大循环次数",
+      "unit": "次",
+      "minimum": 1,
+      "maximum": 20,
+      "anchors": [
+        "循环"
+      ],
+      "integer": true
+    },
+    "cool_timeout_minutes": {
+      "label": "冷却最长等待时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 1440,
+      "anchors": [
+        "冷却"
+      ],
+      "integer": false
+    },
+    "residue_dry_temperature_c": {
+      "label": "抽提物干燥温度",
+      "unit": "℃",
+      "minimum": 1,
+      "maximum": 300,
+      "anchors": [
+        "抽提物"
+      ],
+      "integer": false
+    },
+    "residue_dry_minutes": {
+      "label": "抽提物干燥时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 10080,
+      "anchors": [
+        "抽提物"
+      ],
+      "integer": false
+    },
+    "solvent_timeout_minutes": {
+      "label": "溶剂去除最长时长",
+      "unit": "min",
+      "minimum": 1,
+      "maximum": 1440,
+      "anchors": [
+        "溶剂去除"
+      ],
+      "integer": false
+    }
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "label": "皮革油脂抽提任务",
+      "kind": "start",
+      "requires": [],
+      "next": "ventilation",
+      "phase_id": "preparation",
+      "display": {}
+    },
+    {
+      "id": "ventilation",
+      "label": "核验通风状态",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "ventilation_ok"
+      ],
+      "guard": "ventilation_ok",
+      "on_error": "review",
+      "operation_id": "lab.meta.verify_ventilation",
+      "next": "cut",
+      "input_bindings": {
+        "station_id": {
+          "object_ref": "ventilation.station_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "preparation",
+      "display": {}
+    },
+    {
+      "id": "cut",
+      "label": "执行一次皮革剪切",
+      "kind": "action",
+      "requires": [
+        "cut_size_cm"
+      ],
+      "outputs": [
+        "cut_completed"
+      ],
+      "operation_id": "robot.meta.cut_leather",
+      "next": "cut_size_check",
+      "on_error": "review",
+      "input_bindings": {
+        "sample_id": {
+          "object_ref": "cut.sample_id"
+        },
+        "tool_id": {
+          "object_ref": "cut.tool_id"
+        },
+        "cut_path_id": {
+          "object_ref": "cut.cut_path_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "preparation",
+      "display": {}
+    },
+    {
+      "id": "cut_size_check",
+      "label": "皮革切块尺寸与数量满足要求了吗？",
+      "kind": "decision",
+      "requires": [
+        "cut_size_cm",
+        "max_cut_actions"
+      ],
+      "check": "registered_cut_geometry_inspection",
+      "on_pass": "rinse_weighing",
+      "on_fail": "cut",
+      "on_limit": "review",
+      "max_iterations_ref": "max_cut_actions",
+      "counter_id": "cut_actions",
+      "phase_id": "preparation",
+      "display": {}
+    },
+    {
+      "id": "rinse_weighing",
+      "label": "清洗称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "rinsing_completed"
+      ],
+      "operation_id": "robot.meta.rinse_vessel",
+      "next": "weighing_initial_open",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "rinse_weighing.object_id"
+        },
+        "cleaning_profile_id": {
+          "object_ref": "rinse_weighing.cleaning_profile_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "weighing_initial_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_load_pick",
+      "label": "抓取称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "weighing_initial_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_initial_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_load_move",
+      "label": "将称量瓶移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "weighing_initial_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_initial_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_initial_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_load_release",
+      "label": "放置称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "weighing_initial_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_initial_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_initial_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "weighing_initial_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "weighing_initial_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "oven_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "weighing_initial_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "oven_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "weighing_initial_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "initial_dry_minutes"
+      ],
+      "duration_ref": "initial_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "weighing_initial_stop",
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "weighing_initial_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "weighing_initial_unload_open",
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "weighing_initial_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_unload_pick",
+      "label": "抓取称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "weighing_initial_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_initial_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_unload_move",
+      "label": "将称量瓶移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "weighing_initial_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_initial_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_initial_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_unload_release",
+      "label": "放置称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "weighing_initial_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_initial_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_initial_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "weighing_initial_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "weighing_initial_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_initial_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "weighing_baseline_transfer_pick",
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_baseline_transfer_pick",
+      "label": "抓取称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "weighing_baseline_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_baseline_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_baseline_transfer_move",
+      "label": "将称量瓶移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "weighing_baseline_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_baseline_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_baseline_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_baseline_transfer_release",
+      "label": "放置称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "weighing_baseline",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_baseline_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_baseline_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "weighing_baseline_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_baseline",
+      "label": "称量称量瓶初始质量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "state_updates": {
+        "weighing_previous_g": "result.mass_g"
+      },
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "weighing_repeat_open",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "weighing_baseline.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "weighing_repeat_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_load_pick",
+      "label": "抓取称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "weighing_repeat_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_repeat_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_load_move",
+      "label": "将称量瓶移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "weighing_repeat_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_repeat_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_repeat_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_load_release",
+      "label": "放置称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "weighing_repeat_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_repeat_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_repeat_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "weighing_repeat_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "weighing_repeat_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "oven_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "weighing_repeat_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "oven_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "weighing_repeat_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "repeat_dry_minutes"
+      ],
+      "duration_ref": "repeat_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "weighing_repeat_stop",
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "weighing_repeat_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "weighing_repeat_unload_open",
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "weighing_repeat_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_unload_pick",
+      "label": "抓取称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "weighing_repeat_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_repeat_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_unload_move",
+      "label": "将称量瓶移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "weighing_repeat_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_repeat_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_repeat_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_unload_release",
+      "label": "放置称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "weighing_repeat_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_repeat_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_repeat_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "weighing_repeat_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "weighing_repeat_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_repeat_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "weighing_current_transfer_pick",
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_current_transfer_pick",
+      "label": "抓取称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "weighing_current_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_current_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_current_transfer_move",
+      "label": "将称量瓶移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "weighing_current_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_current_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_current_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_current_transfer_release",
+      "label": "放置称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "weighing_current",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "weighing_current_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "weighing_current_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "weighing_current_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_current",
+      "label": "再次称量称量瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "weighing_check",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "weighing_current.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "weighing",
+      "display": {}
+    },
+    {
+      "id": "weighing_check",
+      "label": "称量瓶达到恒重吗？",
+      "kind": "loop_check",
+      "requires": [
+        "weighing_threshold_mg",
+        "max_cycles"
+      ],
+      "data_refs": [
+        "weighing_current.mass_g"
+      ],
+      "previous_state_ref": "weighing_previous_g",
+      "threshold_ref": "weighing_threshold_mg",
+      "comparison": "abs(current_g - previous_g) * 1000 < threshold_mg",
+      "max_iterations_ref": "max_cycles",
+      "on_fail": "weighing_repeat_open",
+      "on_limit": "review",
+      "outputs": [
+        "constant_mass_g"
+      ],
+      "repeat_state_updates": {
+        "weighing_previous_g": "weighing_current.mass_g"
+      },
+      "counter_id": "weighing_cycles",
+      "on_pass": "wet_sample_load",
+      "phase_id": "weighing",
+      "display": {
+        "notice": "两次质量差小于阈值才通过；否则重复烘干、冷却、称量，达到上限停止复核。",
+        "branch_labels": {
+          "on_fail": "否，更新上次质量后返回"
+        }
+      }
+    },
+    {
+      "id": "wet_sample_load",
+      "label": "向称量瓶放入水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "piece_placed"
+      ],
+      "operation_id": "robot.meta.transfer_solid_piece",
+      "next": "wet_mass",
+      "on_error": "review",
+      "input_bindings": {
+        "sample_id": {
+          "object_ref": "wet_sample_load.sample_id"
+        },
+        "target_object_id": {
+          "object_ref": "wet_sample_load.target_object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "wet_mass",
+      "label": "称量瓶与湿试样总质量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "moisture_open",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "wet_mass.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "moisture_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_load_pick",
+      "label": "抓取水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "moisture_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_load_move",
+      "label": "将水分测定试样移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "moisture_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "moisture_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_load_release",
+      "label": "放置水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "moisture_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "moisture_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "moisture_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "moisture_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "sample_dry_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "moisture_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "sample_dry_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "moisture_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "sample_dry_minutes"
+      ],
+      "duration_ref": "sample_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "moisture_stop",
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "moisture_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "moisture_unload_open",
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "moisture_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_unload_pick",
+      "label": "抓取水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "moisture_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_unload_move",
+      "label": "将水分测定试样移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "moisture_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "moisture_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_unload_release",
+      "label": "放置水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "moisture_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "moisture_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "moisture_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "moisture_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "moisture_mass_transfer_pick",
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_mass_transfer_pick",
+      "label": "抓取水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "moisture_mass_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_mass_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_mass_transfer_move",
+      "label": "将水分测定试样移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "moisture_mass_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_mass_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "moisture_mass_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_mass_transfer_release",
+      "label": "放置水分测定试样",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "dry_mass",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "moisture_mass_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "moisture_mass_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "moisture_mass_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "dry_mass",
+      "label": "称量瓶与干试样总质量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "moisture_fraction",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "dry_mass.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "moisture_fraction",
+      "label": "计算样品水分比例",
+      "kind": "compute",
+      "requires": [],
+      "formula": "moisture_fraction",
+      "data_refs": [
+        "weighing_check.constant_mass_g",
+        "wet_mass.mass_g",
+        "dry_mass.mass_g"
+      ],
+      "outputs": [
+        "moisture_fraction"
+      ],
+      "next": "sample_tare_container_pick",
+      "phase_id": "moisture",
+      "display": {}
+    },
+    {
+      "id": "sample_tare_container_pick",
+      "label": "抓取抽提试样容器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "sample_tare_container_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "sample_tare_container_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "sample_tare_container_move",
+      "label": "将抽提试样容器移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "sample_tare_container_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "sample_tare_container_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "sample_tare_container_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "sample_tare_container_release",
+      "label": "放置抽提试样容器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "sample_tare",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "sample_tare_container_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "sample_tare_container_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "sample_tare_container_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "sample_tare",
+      "label": "抽提试样容器置于天平后去皮",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "tare_completed"
+      ],
+      "operation_id": "balance.meta.tare",
+      "next": "target_sample",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "target_sample",
+      "label": "选取抽提试样（称量确认实际质量）",
+      "kind": "action",
+      "requires": [
+        "sample_target_g"
+      ],
+      "outputs": [
+        "piece_placed"
+      ],
+      "operation_id": "robot.meta.transfer_solid_piece",
+      "next": "sample_mass",
+      "on_error": "review",
+      "input_bindings": {
+        "sample_id": {
+          "object_ref": "target_sample.sample_id"
+        },
+        "target_object_id": {
+          "object_ref": "target_sample.target_object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "sample_mass",
+      "label": "记录抽提试样实际净质量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "guard": "stable_and_net_mass",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "cotton_bottom",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "sample_mass.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "cotton_bottom",
+      "label": "放置滤纸筒底部脱脂棉",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "cotton_placed"
+      ],
+      "operation_id": "robot.meta.place_cotton",
+      "next": "sample_thimble",
+      "on_error": "review",
+      "input_bindings": {
+        "cotton_id": {
+          "object_ref": "cotton_bottom.cotton_id"
+        },
+        "thimble_id": {
+          "object_ref": "cotton_bottom.thimble_id"
+        },
+        "placement_id": {
+          "object_ref": "cotton_bottom.placement_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "sample_thimble",
+      "label": "滤纸筒装入皮革样品",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "sample_loaded"
+      ],
+      "operation_id": "robot.meta.insert_extraction_sample",
+      "next": "cotton_top",
+      "on_error": "review",
+      "input_bindings": {
+        "sample_id": {
+          "object_ref": "sample_thimble.sample_id"
+        },
+        "thimble_id": {
+          "object_ref": "sample_thimble.thimble_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "cotton_top",
+      "label": "放置滤纸筒上部脱脂棉",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "cotton_placed"
+      ],
+      "operation_id": "robot.meta.place_cotton",
+      "next": "rinse_empty",
+      "on_error": "review",
+      "input_bindings": {
+        "cotton_id": {
+          "object_ref": "cotton_top.cotton_id"
+        },
+        "thimble_id": {
+          "object_ref": "cotton_top.thimble_id"
+        },
+        "placement_id": {
+          "object_ref": "cotton_top.placement_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "sample",
+      "display": {}
+    },
+    {
+      "id": "rinse_empty",
+      "label": "清洗空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "rinsing_completed"
+      ],
+      "operation_id": "robot.meta.rinse_vessel",
+      "next": "empty_initial_open",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "rinse_empty.object_id"
+        },
+        "cleaning_profile_id": {
+          "object_ref": "rinse_empty.cleaning_profile_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "empty_initial_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_load_pick",
+      "label": "抓取空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "empty_initial_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_initial_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_load_move",
+      "label": "将空抽提瓶移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "empty_initial_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_initial_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_initial_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_load_release",
+      "label": "放置空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "empty_initial_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_initial_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_initial_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "empty_initial_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "empty_initial_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "empty_dry_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "empty_initial_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "empty_dry_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "empty_initial_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "empty_initial_dry_minutes"
+      ],
+      "duration_ref": "empty_initial_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "empty_initial_stop",
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "empty_initial_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "empty_initial_unload_open",
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "empty_initial_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_unload_pick",
+      "label": "抓取空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "empty_initial_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_initial_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_unload_move",
+      "label": "将空抽提瓶移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "empty_initial_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_initial_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_initial_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_unload_release",
+      "label": "放置空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "empty_initial_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_initial_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_initial_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "empty_initial_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "empty_initial_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_initial_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "empty_baseline_transfer_pick",
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_baseline_transfer_pick",
+      "label": "抓取空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "empty_baseline_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_baseline_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_baseline_transfer_move",
+      "label": "将空抽提瓶移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "empty_baseline_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_baseline_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_baseline_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_baseline_transfer_release",
+      "label": "放置空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "empty_baseline",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_baseline_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_baseline_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "empty_baseline_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_baseline",
+      "label": "称量空抽提瓶初始质量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "state_updates": {
+        "empty_previous_g": "result.mass_g"
+      },
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "empty_repeat_open",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "empty_baseline.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "empty_repeat_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_load_pick",
+      "label": "抓取空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "empty_repeat_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_repeat_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_load_move",
+      "label": "将空抽提瓶移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "empty_repeat_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_repeat_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_repeat_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_load_release",
+      "label": "放置空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "empty_repeat_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_repeat_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_repeat_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "empty_repeat_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "empty_repeat_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "empty_dry_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "empty_repeat_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "empty_dry_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "empty_repeat_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "empty_repeat_dry_minutes"
+      ],
+      "duration_ref": "empty_repeat_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "empty_repeat_stop",
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "empty_repeat_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "empty_repeat_unload_open",
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "empty_repeat_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_unload_pick",
+      "label": "抓取空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "empty_repeat_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_repeat_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_unload_move",
+      "label": "将空抽提瓶移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "empty_repeat_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_repeat_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_repeat_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_unload_release",
+      "label": "放置空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "empty_repeat_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_repeat_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_repeat_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "empty_repeat_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "empty_repeat_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_repeat_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "empty_current_transfer_pick",
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_current_transfer_pick",
+      "label": "抓取空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "empty_current_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_current_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_current_transfer_move",
+      "label": "将空抽提瓶移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "empty_current_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_current_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_current_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_current_transfer_release",
+      "label": "放置空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "empty_current",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "empty_current_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "empty_current_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "empty_current_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_current",
+      "label": "再次称量空抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "empty_check",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "empty_current.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "empty",
+      "display": {}
+    },
+    {
+      "id": "empty_check",
+      "label": "空抽提瓶达到恒重吗？",
+      "kind": "loop_check",
+      "requires": [
+        "empty_threshold_mg",
+        "max_cycles"
+      ],
+      "data_refs": [
+        "empty_current.mass_g"
+      ],
+      "previous_state_ref": "empty_previous_g",
+      "threshold_ref": "empty_threshold_mg",
+      "comparison": "abs(current_g - previous_g) * 1000 < threshold_mg",
+      "max_iterations_ref": "max_cycles",
+      "on_fail": "empty_repeat_open",
+      "on_limit": "review",
+      "outputs": [
+        "constant_mass_g"
+      ],
+      "repeat_state_updates": {
+        "empty_previous_g": "empty_current.mass_g"
+      },
+      "counter_id": "empty_cycles",
+      "on_pass": "solvent_aspirate",
+      "phase_id": "empty",
+      "display": {
+        "notice": "两次质量差小于阈值才通过；否则重复烘干、冷却、称量，达到上限停止复核。",
+        "branch_labels": {
+          "on_fail": "否，更新上次质量后返回"
+        }
+      }
+    },
+    {
+      "id": "solvent_aspirate",
+      "label": "吸取二氯甲烷（工具与材料须审核）",
+      "kind": "action",
+      "requires": [
+        "solvent_ml"
+      ],
+      "outputs": [
+        "aspiration_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.aspirate_liquid",
+      "next": "solvent_dispense",
+      "on_error": "review",
+      "input_bindings": {
+        "tool_id": {
+          "object_ref": "solvent_aspirate.tool_id"
+        },
+        "source_object_id": {
+          "object_ref": "solvent_aspirate.source_object_id"
+        },
+        "volume_ml": {
+          "parameter_ref": "solvent_ml"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "solvent_dispense",
+      "label": "向抽提瓶加入二氯甲烷",
+      "kind": "action",
+      "requires": [
+        "solvent_ml"
+      ],
+      "outputs": [
+        "dispense_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.dispense_liquid",
+      "next": "thimble_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "tool_id": {
+          "object_ref": "solvent_dispense.tool_id"
+        },
+        "target_object_id": {
+          "object_ref": "solvent_dispense.target_object_id"
+        },
+        "volume_ml": {
+          "parameter_ref": "solvent_ml"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "thimble_pick",
+      "label": "抓取滤纸筒",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "thimble_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "thimble_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "thimble_move",
+      "label": "将滤纸筒移至索氏抽提器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "thimble_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "thimble_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "thimble_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "thimble_release",
+      "label": "放置滤纸筒",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "joint_lower",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "thimble_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "thimble_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "thimble_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "joint_lower",
+      "label": "连接抽提瓶与索氏抽提器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "joint_connected"
+      ],
+      "operation_id": "robot.meta.connect_glass_joint",
+      "next": "joint_upper",
+      "on_error": "review",
+      "input_bindings": {
+        "source_joint_id": {
+          "object_ref": "joint_lower.source_joint_id"
+        },
+        "target_joint_id": {
+          "object_ref": "joint_lower.target_joint_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "joint_upper",
+      "label": "连接索氏抽提器与冷凝管",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "joint_connected"
+      ],
+      "operation_id": "robot.meta.connect_glass_joint",
+      "next": "clamp",
+      "on_error": "review",
+      "input_bindings": {
+        "source_joint_id": {
+          "object_ref": "joint_upper.source_joint_id"
+        },
+        "target_joint_id": {
+          "object_ref": "joint_upper.target_joint_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "clamp",
+      "label": "固定夹具",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "clamp_fastened"
+      ],
+      "operation_id": "robot.meta.fasten_clamp",
+      "next": "inspect_assembly",
+      "on_error": "review",
+      "input_bindings": {
+        "clamp_id": {
+          "object_ref": "clamp.clamp_id"
+        },
+        "object_id": {
+          "object_ref": "clamp.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "inspect_assembly",
+      "label": "检查抽提装置连接",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "assembly_ready"
+      ],
+      "guard": "assembly_ready",
+      "on_error": "review",
+      "operation_id": "robot.meta.inspect_extraction_assembly",
+      "next": "water_on",
+      "input_bindings": {
+        "assembly_id": {
+          "object_ref": "inspect_assembly.assembly_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "assembly",
+      "display": {}
+    },
+    {
+      "id": "water_on",
+      "label": "开启冷凝水",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "water_enabled"
+      ],
+      "operation_id": "condenser.meta.open_water",
+      "next": "flow",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "condenser.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "condenser.control_profile_id"
+        }
+      },
+      "phase_id": "extraction",
+      "display": {}
+    },
+    {
+      "id": "flow",
+      "label": "读取冷凝水流量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "flow_rate"
+      ],
+      "guard": "approved_cooling_flow_profile",
+      "on_error": "review",
+      "operation_id": "condenser.meta.read_flow",
+      "next": "bath_set",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "condenser.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "condenser.control_profile_id"
+        }
+      },
+      "phase_id": "extraction",
+      "display": {}
+    },
+    {
+      "id": "bath_set",
+      "label": "设置水浴温度",
+      "kind": "action",
+      "requires": [
+        "bath_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "water_bath.meta.set_temperature",
+      "next": "bath_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "water_bath.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "bath_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "water_bath.control_profile_id"
+        }
+      },
+      "phase_id": "extraction",
+      "display": {}
+    },
+    {
+      "id": "bath_start",
+      "label": "启动水浴加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "water_bath.meta.start",
+      "next": "reflux_watch",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "water_bath.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "water_bath.control_profile_id"
+        }
+      },
+      "phase_id": "extraction",
+      "display": {}
+    },
+    {
+      "id": "reflux_watch",
+      "label": "监测累计完整回流次数，至少30次后才可结束抽提",
+      "kind": "monitored_hold",
+      "requires": [
+        "minimum_reflux_cycles",
+        "extraction_timeout_hours",
+        "monitor_minutes"
+      ],
+      "operation_id": "robot.meta.monitor_reflux",
+      "duration_ref": "extraction_timeout_hours",
+      "duration_role": "safety_timeout_only",
+      "interval_ref": "monitor_minutes",
+      "completion_check": "verified_completed_cycles_at_least_required",
+      "minimum_count_ref": "minimum_reflux_cycles",
+      "guard": "reflux_ok_and_siphon_ok_and_condensation_ok",
+      "on_error": "safe_stop",
+      "on_timeout": "safe_stop",
+      "outputs": [
+        "extraction_completed",
+        "completed_cycles"
+      ],
+      "next": "bath_stop",
+      "input_bindings": {
+        "assembly_id": {
+          "object_ref": "reflux_watch.assembly_id"
+        },
+        "monitor_profile_id": {
+          "resource_ref": "soxhlet.monitor_profile_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "extraction",
+      "display": {
+        "notice": "按已验证反馈累计完整回流次数，达到最低次数才可正常结束；时长仅用于超时保护，不按时间推算次数。"
+      }
+    },
+    {
+      "id": "bath_stop",
+      "label": "停止水浴加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "water_bath.meta.stop",
+      "next": "read_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "water_bath.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "water_bath.control_profile_id"
+        }
+      },
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "read_cool",
+      "label": "监测装置冷却温度",
+      "kind": "action",
+      "requires": [
+        "cool_limit_c"
+      ],
+      "outputs": [
+        "temperature_c"
+      ],
+      "operation_id": "robot.meta.check_temperature",
+      "next": "cool_guard",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "read_cool.object_id"
+        },
+        "sensor_id": {
+          "resource_ref": "soxhlet.sensor_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "cool_guard",
+      "label": "装置达到允许拆卸温度了吗？",
+      "kind": "guard",
+      "requires": [
+        "cool_limit_c",
+        "cool_timeout_minutes"
+      ],
+      "data_refs": [
+        "read_cool.temperature_c"
+      ],
+      "check": "temperature_at_or_below_limit",
+      "polling_operation": "robot.meta.check_temperature",
+      "on_timeout": "review",
+      "next": "water_off",
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "water_off",
+      "label": "关闭冷凝水",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "water_disabled"
+      ],
+      "operation_id": "condenser.meta.close_water",
+      "next": "unclamp",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "condenser.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "condenser.control_profile_id"
+        }
+      },
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "unclamp",
+      "label": "松开夹具",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "clamp_released"
+      ],
+      "operation_id": "robot.meta.release_clamp",
+      "next": "joint_upper_off",
+      "on_error": "review",
+      "input_bindings": {
+        "clamp_id": {
+          "object_ref": "unclamp.clamp_id"
+        },
+        "object_id": {
+          "object_ref": "unclamp.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "joint_upper_off",
+      "label": "分离冷凝管与抽提器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "joint_disconnected"
+      ],
+      "operation_id": "robot.meta.disconnect_glass_joint",
+      "next": "joint_lower_off",
+      "on_error": "review",
+      "input_bindings": {
+        "source_joint_id": {
+          "object_ref": "joint_upper_off.source_joint_id"
+        },
+        "target_joint_id": {
+          "object_ref": "joint_upper_off.target_joint_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "joint_lower_off",
+      "label": "分离抽提器与抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "joint_disconnected"
+      ],
+      "operation_id": "robot.meta.disconnect_glass_joint",
+      "next": "remove_thimble_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "source_joint_id": {
+          "object_ref": "joint_lower_off.source_joint_id"
+        },
+        "target_joint_id": {
+          "object_ref": "joint_lower_off.target_joint_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "disassembly",
+      "display": {}
+    },
+    {
+      "id": "remove_thimble_pick",
+      "label": "抓取装有皮革样品的滤纸筒",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "remove_thimble_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "remove_thimble_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "remove_thimble_move",
+      "label": "将装有皮革样品的滤纸筒移至指定样品暂存位置",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "remove_thimble_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "remove_thimble_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "remove_thimble_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "remove_thimble_release",
+      "label": "放置装有皮革样品的滤纸筒",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "recovery_flask_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "remove_thimble_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "remove_thimble_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "remove_thimble_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_flask_pick",
+      "label": "抓取保留萃取液的抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "recovery_flask_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "recovery_flask_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_flask_move",
+      "label": "将保留萃取液的抽提瓶移至通风橱内蒸馏回收工位",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "recovery_flask_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "recovery_flask_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "recovery_flask_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_flask_release",
+      "label": "放置保留萃取液的抽提瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "recovery_ventilation",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "recovery_flask_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "recovery_flask_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "recovery_flask_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_ventilation",
+      "label": "核验蒸馏回收工位通风状态",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "ventilation_ok"
+      ],
+      "guard": "ventilation_ok",
+      "on_error": "review",
+      "operation_id": "lab.meta.verify_ventilation",
+      "next": "recovery_joint",
+      "input_bindings": {
+        "station_id": {
+          "object_ref": "recovery_ventilation.station_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_joint",
+      "label": "连接抽提瓶与蒸馏回收装置",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "joint_connected"
+      ],
+      "operation_id": "robot.meta.connect_glass_joint",
+      "next": "recovery_condenser_joint",
+      "on_error": "review",
+      "input_bindings": {
+        "source_joint_id": {
+          "object_ref": "recovery_joint.source_joint_id"
+        },
+        "target_joint_id": {
+          "object_ref": "recovery_joint.target_joint_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_condenser_joint",
+      "label": "连接蒸馏冷凝回收接口",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "joint_connected"
+      ],
+      "operation_id": "robot.meta.connect_glass_joint",
+      "next": "recovery_clamp",
+      "on_error": "review",
+      "input_bindings": {
+        "source_joint_id": {
+          "object_ref": "recovery_condenser_joint.source_joint_id"
+        },
+        "target_joint_id": {
+          "object_ref": "recovery_condenser_joint.target_joint_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_clamp",
+      "label": "固定蒸馏回收装置夹具",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "clamp_fastened"
+      ],
+      "operation_id": "robot.meta.fasten_clamp",
+      "next": "recovery_water_on",
+      "on_error": "review",
+      "input_bindings": {
+        "clamp_id": {
+          "object_ref": "recovery_clamp.clamp_id"
+        },
+        "object_id": {
+          "object_ref": "recovery_clamp.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_water_on",
+      "label": "开启蒸馏回收冷凝水",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "water_enabled"
+      ],
+      "operation_id": "condenser.meta.open_water",
+      "next": "recovery_flow",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "condenser.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "condenser.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_flow",
+      "label": "核验蒸馏回收冷凝水反馈",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "flow_rate"
+      ],
+      "guard": "approved_recovery_flow_profile",
+      "on_error": "review",
+      "operation_id": "condenser.meta.read_flow",
+      "next": "remove_solvent",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "condenser.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "condenser.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "remove_solvent",
+      "label": "按登记方法受控加热并冷凝回收二氯甲烷",
+      "kind": "action",
+      "requires": [
+        "recovery_temperature_c"
+      ],
+      "outputs": [
+        "started"
+      ],
+      "operation_id": "solvent_remover.meta.start",
+      "next": "solvent_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "solvent_remover.device_id"
+        },
+        "method_id": {
+          "method_ref": "solvent_removal_method"
+        },
+        "control_profile_id": {
+          "resource_ref": "solvent_remover.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {},
+      "method_requirement": "solvent_removal_method"
+    },
+    {
+      "id": "solvent_wait",
+      "label": "是否无持续馏出且无明显大量游离溶剂？",
+      "kind": "guard",
+      "requires": [
+        "solvent_timeout_minutes"
+      ],
+      "check": "no_continuous_distillate_and_no_obvious_bulk_free_solvent",
+      "endpoint_role": "operational_distillation_endpoint_only",
+      "monitoring_guard": "ventilation_and_cooling_feedback_ok",
+      "confirmation": "verified_observation_or_operator_confirmation",
+      "on_error": "solvent_safe_stop",
+      "on_timeout": "solvent_safe_stop",
+      "next": "solvent_stop",
+      "phase_id": "recovery",
+      "display": {
+        "notice": "仅为蒸馏阶段操作性结束参考，不等于完全无残留；仍须按标准进行后续检查、烘干、冷却和称量。"
+      }
+    },
+    {
+      "id": "solvent_stop",
+      "label": "停止溶剂去除程序",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "solvent_remover.meta.stop",
+      "next": "recovery_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "solvent_remover.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "solvent_remover.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_cool",
+      "label": "保持冷凝并等待回收装置满足后续操作条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "check": "approved_recovery_cooling_profile",
+      "on_timeout": "review",
+      "next": "recovery_water_off",
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "recovery_water_off",
+      "label": "回收装置冷却确认后关闭冷凝水",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "water_disabled"
+      ],
+      "operation_id": "condenser.meta.close_water",
+      "next": "residue_check",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "condenser.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "condenser.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "residue_check",
+      "label": "检查溶剂残留状态",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "residue_check_passed"
+      ],
+      "guard": "residue_check_passed",
+      "on_error": "review",
+      "operation_id": "robot.meta.check_solvent_residue",
+      "next": "final_initial_open",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "residue_check.object_id"
+        },
+        "method_id": {
+          "method_ref": "solvent_removal_method"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "recovery",
+      "display": {}
+    },
+    {
+      "id": "final_initial_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "final_initial_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_load_pick",
+      "label": "抓取抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "final_initial_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_initial_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_load_move",
+      "label": "将抽提后样品瓶移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "final_initial_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_initial_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_initial_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_load_release",
+      "label": "放置抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "final_initial_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_initial_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_initial_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "final_initial_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "final_initial_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "residue_dry_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "final_initial_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "residue_dry_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "final_initial_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "residue_dry_minutes"
+      ],
+      "duration_ref": "residue_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "final_initial_stop",
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "final_initial_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "final_initial_unload_open",
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "final_initial_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_unload_pick",
+      "label": "抓取抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "final_initial_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_initial_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_unload_move",
+      "label": "将抽提后样品瓶移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "final_initial_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_initial_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_initial_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_unload_release",
+      "label": "放置抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "final_initial_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_initial_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_initial_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "final_initial_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "final_initial_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_initial_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "final_baseline_transfer_pick",
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_baseline_transfer_pick",
+      "label": "抓取抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "final_baseline_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_baseline_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_baseline_transfer_move",
+      "label": "将抽提后样品瓶移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "final_baseline_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_baseline_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_baseline_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_baseline_transfer_release",
+      "label": "放置抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "final_baseline",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_baseline_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_baseline_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "final_baseline_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_baseline",
+      "label": "称量抽提后样品瓶初始质量",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "state_updates": {
+        "final_previous_g": "result.mass_g"
+      },
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "final_repeat_open",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "final_baseline.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_open",
+      "label": "打开烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "final_repeat_load_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_load_pick",
+      "label": "抓取抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "final_repeat_load_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_repeat_load_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_load_move",
+      "label": "将抽提后样品瓶移至烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "final_repeat_load_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_repeat_load_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_repeat_load_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_load_release",
+      "label": "放置抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "final_repeat_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_repeat_load_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_repeat_load_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "final_repeat_load_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "final_repeat_set",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_set",
+      "label": "设置烘箱温度",
+      "kind": "action",
+      "requires": [
+        "residue_dry_temperature_c"
+      ],
+      "outputs": [
+        "temperature_set"
+      ],
+      "operation_id": "drying_oven.meta.set_temperature",
+      "next": "final_repeat_start",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "temperature_c": {
+          "parameter_ref": "residue_dry_temperature_c"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_start",
+      "label": "启动烘箱",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "running"
+      ],
+      "operation_id": "drying_oven.meta.start",
+      "next": "final_repeat_wait",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_wait",
+      "label": "等待干燥并持续监测温度与互锁",
+      "kind": "wait",
+      "requires": [
+        "residue_dry_minutes"
+      ],
+      "duration_ref": "residue_dry_minutes",
+      "guard": "oven_feedback_and_interlocks_ok",
+      "on_error": "oven_safe_stop",
+      "on_timeout": "oven_safe_stop",
+      "next": "final_repeat_stop",
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_stop",
+      "label": "停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "operation_id": "drying_oven.meta.stop",
+      "next": "final_repeat_safe",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_safe",
+      "label": "等待满足烘箱安全取物条件",
+      "kind": "guard",
+      "requires": [
+        "cool_timeout_minutes"
+      ],
+      "on_timeout": "review",
+      "check": "safe_unload_profile",
+      "next": "final_repeat_unload_open",
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_unload_open",
+      "label": "打开烘箱取物",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_open"
+      ],
+      "operation_id": "robot.meta.open_device_door",
+      "next": "final_repeat_unload_pick",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_unload_pick",
+      "label": "抓取抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "final_repeat_unload_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_repeat_unload_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_unload_move",
+      "label": "将抽提后样品瓶移至干燥器",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "final_repeat_unload_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_repeat_unload_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_repeat_unload_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_unload_release",
+      "label": "放置抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "final_repeat_unload_close",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_repeat_unload_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_repeat_unload_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "final_repeat_unload_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_unload_close",
+      "label": "关闭烘箱门",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "door_closed"
+      ],
+      "operation_id": "robot.meta.close_device_door",
+      "next": "final_repeat_cool",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "soxhlet.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_repeat_cool",
+      "label": "在干燥器中冷却",
+      "kind": "wait",
+      "requires": [
+        "cool_minutes"
+      ],
+      "duration_ref": "cool_minutes",
+      "next": "final_current_transfer_pick",
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_current_transfer_pick",
+      "label": "抓取抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "grasp_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.envelop_grasp",
+      "next": "final_current_transfer_move",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_current_transfer_pick.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_current_transfer_move",
+      "label": "将抽提后样品瓶移至天平",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "motion_completed",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.move_grasped_object",
+      "next": "final_current_transfer_release",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_current_transfer_move.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_current_transfer_move.target_location_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_current_transfer_release",
+      "label": "放置抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "release_verified",
+        "operation_log"
+      ],
+      "operation_id": "robot.meta.release_object",
+      "next": "final_current",
+      "on_error": "review",
+      "input_bindings": {
+        "object_id": {
+          "object_ref": "final_current_transfer_release.object_id"
+        },
+        "target_location_id": {
+          "object_ref": "final_current_transfer_release.target_location_id"
+        },
+        "purpose": {
+          "object_ref": "final_current_transfer_release.purpose"
+        },
+        "control_profile_id": {
+          "resource_ref": "soxhlet.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_current",
+      "label": "再次称量抽提后样品瓶",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "mass_g",
+        "stable"
+      ],
+      "guard": "stable",
+      "operation_id": "robot.meta.read_balance_mass",
+      "next": "final_check",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "balance.device_id"
+        },
+        "object_id": {
+          "object_ref": "final_current.object_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "balance.control_profile_id"
+        }
+      },
+      "phase_id": "final",
+      "display": {}
+    },
+    {
+      "id": "final_check",
+      "label": "抽提后样品瓶达到恒重吗？",
+      "kind": "loop_check",
+      "requires": [
+        "final_threshold_mg",
+        "max_cycles"
+      ],
+      "data_refs": [
+        "final_current.mass_g"
+      ],
+      "previous_state_ref": "final_previous_g",
+      "threshold_ref": "final_threshold_mg",
+      "comparison": "abs(current_g - previous_g) * 1000 < threshold_mg",
+      "max_iterations_ref": "max_cycles",
+      "on_fail": "final_repeat_open",
+      "on_limit": "review",
+      "outputs": [
+        "constant_mass_g"
+      ],
+      "repeat_state_updates": {
+        "final_previous_g": "final_current.mass_g"
+      },
+      "counter_id": "final_cycles",
+      "on_pass": "content",
+      "phase_id": "final",
+      "display": {
+        "notice": "两次质量差小于阈值才通过；否则重复烘干、冷却、称量，达到上限停止复核。",
+        "branch_labels": {
+          "on_fail": "否，更新上次质量后返回"
+        }
+      }
+    },
+    {
+      "id": "content",
+      "label": "计算干基二氯甲烷可溶性抽提物含量",
+      "kind": "compute",
+      "requires": [],
+      "formula": "extractable_content_dry_basis",
+      "data_refs": [
+        "empty_check.constant_mass_g",
+        "final_check.constant_mass_g",
+        "sample_mass.mass_g",
+        "moisture_fraction.moisture_fraction"
+      ],
+      "outputs": [
+        "extract_mass_g",
+        "sample_dry_mass_g",
+        "extractable_content_percent_dry_basis"
+      ],
+      "next": "complete",
+      "phase_id": "result",
+      "display": {}
+    },
+    {
+      "id": "complete",
+      "label": "逻辑流程结束（尚未执行）",
+      "kind": "end",
+      "requires": [],
+      "phase_id": "result",
+      "display": {}
+    },
+    {
+      "id": "safe_stop",
+      "label": "异常时停止水浴加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "next": "review",
+      "operation_id": "water_bath.meta.stop",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "water_bath.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "water_bath.control_profile_id"
+        }
+      },
+      "phase_id": "exceptions",
+      "display": {}
+    },
+    {
+      "id": "solvent_safe_stop",
+      "label": "异常时停止溶剂去除程序",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "next": "review",
+      "operation_id": "solvent_remover.meta.stop",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "solvent_remover.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "solvent_remover.control_profile_id"
+        }
+      },
+      "phase_id": "exceptions",
+      "display": {}
+    },
+    {
+      "id": "oven_safe_stop",
+      "label": "异常时停止烘箱加热",
+      "kind": "action",
+      "requires": [],
+      "outputs": [
+        "stopped"
+      ],
+      "next": "review",
+      "operation_id": "drying_oven.meta.stop",
+      "on_error": "review",
+      "input_bindings": {
+        "device_id": {
+          "resource_ref": "drying_oven.device_id"
+        },
+        "control_profile_id": {
+          "resource_ref": "drying_oven.control_profile_id"
+        }
+      },
+      "phase_id": "exceptions",
+      "display": {}
+    },
+    {
+      "id": "review",
+      "label": "停止后请求人工复核，不自动继续",
+      "kind": "end",
+      "requires": [],
+      "phase_id": "exceptions",
+      "display": {}
+    }
+  ]
+}

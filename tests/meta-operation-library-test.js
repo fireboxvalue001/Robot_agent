@@ -16,13 +16,13 @@ const statuses = new Set(["draft", "pending_verification", "verified", "interfac
 const ids = new Set();
 const preconditionIds = new Set(library.preconditions.map((item) => item.id));
 
-assert(library.schema_version === "1.4.0", "unexpected schema version");
+assert(library.schema_version === "1.7.1", "unexpected schema version");
 assert(library.categories.length === 3, "the library must declare exactly three categories");
-assert(library.instruments.length === 5, "the library must declare its instrument groups");
-assert(library.meta_operations.length === 41, "the catalog should contain 41 meta operations");
-assert(library.meta_operations.filter((item) => item.category === "instrument").length === 13, "instrument catalog should contain 13 operations");
-assert(library.meta_operations.filter((item) => item.category === "robot").length === 24, "robot catalog should contain 24 operations");
-assert(library.meta_operations.filter((item) => item.category === "lab").length === 4, "lab catalog should contain 4 operations");
+assert(library.instruments.length === 10, "the library must declare its instrument groups");
+assert(library.meta_operations.length === 93, "the catalog should contain 93 entries including legacy composites");
+assert(library.meta_operations.filter((item) => item.category === "instrument").length === 25, "instrument catalog should contain 25 operations");
+assert(library.meta_operations.filter((item) => item.category === "robot").length === 63, "robot catalog should contain 63 entries including legacy composites");
+assert(library.meta_operations.filter((item) => item.category === "lab").length === 5, "lab catalog should contain 5 operations");
 
 const instrumentIds = new Set(library.instruments.map((item) => item.id));
 assert(instrumentIds.has("vd10"), "VD10 instrument group is missing");

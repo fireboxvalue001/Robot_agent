@@ -23,7 +23,7 @@ def _terms(text: str) -> set[str]:
 
 
 class KnowledgeStore:
-    def __init__(self, project_dir: Path = PROJECT_DIR):
+    def __init__(self, project_dir: Path = PROJECT_DIR, scenario_id: str = "vd10_single_sample_demo"):
         self.project_dir = Path(project_dir)
         library_path = self.project_dir / "data" / "meta-operations.json"
         library_raw = library_path.read_bytes()
@@ -35,8 +35,15 @@ class KnowledgeStore:
         if len(self.operations) != len(self.library["meta_operations"]):
             raise ValueError("The meta-operation library contains duplicate IDs.")
 
-        scenario_path = self.project_dir / "knowledge" / "planner_scenarios" / "vd10_single_sample.json"
-        self.scenario = _load_json(scenario_path)
+        from .scenarios import get_entry, local_json
+        entry = get_entry(scenario_id, self.project_dir)
+        if entry["engine"] != "legacy_linear":
+            raise ValueError("Use the conditional planner for this scenario")
+        self.scenario_source = entry["file"]
+        scenario_file = Path(self.scenario_source).name
+        self.scenario_evidence_id = f"scenario:{Path(scenario_file).stem}"
+        scenario_path = self.project_dir / self.scenario_source
+        self.scenario = local_json(self.project_dir, self.scenario_source, "knowledge/planner_scenarios")
         self.rules = self.scenario["rules"]
         self._validate_references()
         scenario_raw = scenario_path.read_bytes()
@@ -74,10 +81,10 @@ class KnowledgeStore:
 
     def _build_evidence(self) -> dict[str, dict]:
         records = {
-            "scenario:vd10_single_sample": {
-                "evidence_id": "scenario:vd10_single_sample",
+            self.scenario_evidence_id: {
+                "evidence_id": self.scenario_evidence_id,
                 "kind": "planner_scenario",
-                "source_file": "knowledge/planner_scenarios/vd10_single_sample.json",
+                "source_file": self.scenario_source,
                 "source_sha256": self.scenario_hash,
                 "review_status": self.scenario["review_status"],
                 "independently_verified": False,
@@ -98,7 +105,7 @@ class KnowledgeStore:
             records[rule["rule_id"]] = {
                 "evidence_id": rule["rule_id"],
                 "kind": "planner_rule",
-                "source_file": "knowledge/planner_scenarios/vd10_single_sample.json",
+                "source_file": self.scenario_source,
                 "source_sha256": self.scenario_hash,
                 "locator": f"/rules/{index}",
                 "basis": rule["basis"],
@@ -117,6 +124,7 @@ class KnowledgeStore:
             "scenario_id": self.scenario["scenario_id"],
             "source_library_id": self.library["library_id"],
             "source_library_version": self.library["schema_version"],
+            "source_library_checksum": "sha256:" + self.library_hash,
             "source_operation_count": len(self.operations),
             "scenario_operation_count": len(self.scenario["operations"]),
             "rule_count": len(self.rules),

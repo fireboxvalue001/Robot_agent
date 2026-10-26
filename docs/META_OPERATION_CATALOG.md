@@ -2,6 +2,8 @@
 
 ## 检测仪器元操作
 
+当前能力库版本1.7.1，共93个兼容条目。油脂提取新增接口均为单步定义，尚未接入设备；场景与组合流程见 `docs/LEATHER_EXTRACTION.md`。
+
 ### VD10自动蒸馏测定仪
 
 1. VD10 测试信息准备
@@ -34,6 +36,16 @@
 
 ## 机器人元操作
 
+### 油脂提取新增单步接口
+
+皮革单次剪切、滤纸筒装样、脱脂棉放置、玻璃接口连接、玻璃接口分离、夹具固定、夹具松开、抽提装置连接检查、天平质量读取、冷凝回流与虹吸状态检查、对象温度读取、溶剂残留检查、容器清洗动作、设备门打开、设备门关闭、单块皮革放置，共16项。
+
+仪器类另按天平、烘箱、水浴设备、冷凝水装置和待确定方法的溶剂去除设备分组，共新增12项；环境类新增通风状态核验。读取天平质量属于机器人代替人工读取，不放在天平仪器菜单下。
+
+### 历史兼容条目
+
+以下25项保留原有接口，其中多步条目在界面标为“历史组合”，不作为本次单步动作定义的示例。
+
 1. 试管识别与位置标定
 2. 样品定量分装
 3. 试管装载至 AGV
@@ -58,6 +70,33 @@
 22. 联网仪器数据读取
 23. 非联网仪器屏幕数据读取
 24. 实验报告模板生成
+25. 容器间定量移液：指定来源、目标容器和体积；内部包含吸取、注入和完成核验
+### 本次单步动作
+
+1. 包络式稳定抓取：`robot.meta.envelop_grasp`
+2. 持物搬运：`robot.meta.move_grasped_object`
+3. 释放物体：`robot.meta.release_object`
+4. 指尖精细捏取：`robot.meta.precision_pinch`
+5. 持瓶扶正或回正：`robot.meta.upright_container`
+6. 托盘孔位对准：`robot.meta.align_object_to_slot`
+7. 旋开瓶盖：`robot.meta.unscrew_cap`
+8. 旋紧瓶盖：`robot.meta.tighten_cap`
+9. 密封面受控预压：`robot.meta.preload_seal`
+10. 持瓶受控倾斜：`robot.meta.tilt_container`
+11. 受控倾倒液体：`robot.meta.pour_liquid`
+12. 小幅持瓶振荡摇匀：`robot.meta.hand_shake_sample`
+13. 插入枪头或软塞：`robot.meta.insert_tip_or_stopper`
+14. 拔出枪头或软塞：`robot.meta.remove_tip_or_stopper`
+15. 药勺取样：`robot.meta.scoop_sample`
+16. 固体样品留样释放：`robot.meta.deposit_solid_sample`
+17. 定量吸液：`robot.meta.aspirate_liquid`
+18. 定量排液：`robot.meta.dispense_liquid`
+19. 玻璃棒引流：`robot.meta.guide_liquid`
+20. 识别样品身份与位置：`robot.meta.identify_sample`
+21. 判定样品分类：`robot.meta.classify_sample`
+22. 仪器面板按键轻按：`robot.meta.press_instrument_button`
+
+每项只有一个动作节点。表格中的12组组合顺序另存于 `data/robot-action-templates.json`，不注册为元操作。逐项拆解及复用关系见 `docs/ROBOT_ACTION_CAPABILITIES.md`。涉及对象与关键控制要求位于各操作的 `extensions` 中，现场力、扭矩等限值由控制配置登记。
 
 ## 实验室环境元操作
 

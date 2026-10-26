@@ -1,0 +1,228 @@
+{
+  "library_id": "autolab.vd10.meta_operations",
+  "library_version": "1.7.1",
+  "kind": "action_composition_examples",
+  "notice": "这里只保存组合顺序，不定义元操作。实例化时需绑定参数、满足前置条件，再经规划和物理校验。",
+  "recipes": [
+    {
+      "id": "robot.recipe.grasp_and_transport",
+      "name": "包络式稳定抓取与搬运",
+      "variants": [
+        {
+          "id": "grasp_and_transport_1",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.release_object"
+          ],
+          "note": "抓取、搬运、放置是三个独立动作。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.precision_pinch",
+      "name": "指尖精细捏取",
+      "variants": [
+        {
+          "id": "precision_pinch_1",
+          "operation_ids": [
+            "robot.meta.precision_pinch"
+          ],
+          "note": "只捏取；后续搬运按需另行编排。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.upright_and_return",
+      "name": "拾取、扶正、对位归位",
+      "variants": [
+        {
+          "id": "upright_and_return_1",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.upright_container",
+            "robot.meta.move_grasped_object",
+            "robot.meta.align_object_to_slot",
+            "robot.meta.release_object"
+          ],
+          "note": "归位前必须确认目标孔位可用。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.cap_rotation",
+      "name": "旋开或旋紧瓶盖",
+      "variants": [
+        {
+          "id": "cap_rotation_1",
+          "operation_ids": [
+            "robot.meta.unscrew_cap"
+          ],
+          "note": "盖体已夹持且瓶体已固定。"
+        },
+        {
+          "id": "cap_rotation_2",
+          "operation_ids": [
+            "robot.meta.tighten_cap"
+          ],
+          "note": "旋开与旋紧是不同选择，不连续执行两者。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.preload_then_tighten",
+      "name": "预压密封再旋紧",
+      "variants": [
+        {
+          "id": "preload_then_tighten_1",
+          "operation_ids": [
+            "robot.meta.preload_seal",
+            "robot.meta.tighten_cap"
+          ],
+          "note": "先施加预压，再旋紧；密封检测属于独立确认条件。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.pour",
+      "name": "持瓶倾斜倾倒试液",
+      "variants": [
+        {
+          "id": "pour_1",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.tilt_container",
+            "robot.meta.pour_liquid",
+            "robot.meta.upright_container"
+          ],
+          "note": "回正复用扶正动作；结束后仍持瓶，若需放回，再追加搬运和释放。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.hand_shake",
+      "name": "小幅振荡摇匀",
+      "variants": [
+        {
+          "id": "hand_shake_1",
+          "operation_ids": [
+            "robot.meta.hand_shake_sample"
+          ],
+          "note": "容器已密封并稳定夹持；否则先抓取。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.insert_or_remove",
+      "name": "插拔枪头、瓶塞",
+      "variants": [
+        {
+          "id": "insert_or_remove_1",
+          "operation_ids": [
+            "robot.meta.insert_tip_or_stopper"
+          ],
+          "note": "仅插入。"
+        },
+        {
+          "id": "insert_or_remove_2",
+          "operation_ids": [
+            "robot.meta.remove_tip_or_stopper"
+          ],
+          "note": "仅拔出，不与插入合并为一个操作。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.tool_handling",
+      "name": "工具介导操作",
+      "variants": [
+        {
+          "id": "tool_handling_1",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.aspirate_liquid",
+            "robot.meta.move_grasped_object",
+            "robot.meta.dispense_liquid"
+          ],
+          "note": "先抓取工具并定位至来源，吸液后搬运至目标，再排液；两次搬运分别绑定不同位置。"
+        },
+        {
+          "id": "tool_handling_2",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.scoop_sample",
+            "robot.meta.move_grasped_object",
+            "robot.meta.deposit_solid_sample"
+          ],
+          "note": "药勺留样：抓工具、定位到来源、取样、搬运到目标、释放样品。"
+        },
+        {
+          "id": "tool_handling_3",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.guide_liquid"
+          ],
+          "note": "玻璃棒先抓取并定位，再引流。"
+        },
+        {
+          "id": "tool_handling_4",
+          "operation_ids": [
+            "robot.meta.precision_pinch",
+            "robot.meta.move_grasped_object",
+            "robot.meta.release_object"
+          ],
+          "note": "镊子或指尖夹持固体样品后，搬运并释放。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.sorting",
+      "name": "样品分拣与区分",
+      "variants": [
+        {
+          "id": "sorting_1",
+          "operation_ids": [
+            "robot.meta.identify_sample",
+            "robot.meta.classify_sample",
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.release_object"
+          ],
+          "note": "依据外部规则为每个样品选择去向；对待分拣样品重复动作顺序。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.button_tap",
+      "name": "轻按仪器按键",
+      "variants": [
+        {
+          "id": "button_tap_1",
+          "operation_ids": [
+            "robot.meta.press_instrument_button"
+          ],
+          "note": "已定位按键的一次轻按闭环；触发停止和安全撤离属于动作控制条件。"
+        }
+      ]
+    },
+    {
+      "id": "robot.recipe.waste_deposit",
+      "name": "废样投放",
+      "variants": [
+        {
+          "id": "waste_deposit_1",
+          "operation_ids": [
+            "robot.meta.envelop_grasp",
+            "robot.meta.move_grasped_object",
+            "robot.meta.release_object"
+          ],
+          "note": "释放时 purpose=waste_deposit，必须携带外部废弃确认和废物类别。"
+        }
+      ]
+    }
+  ]
+}

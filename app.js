@@ -37,9 +37,11 @@ let workflow = [];
 let taskId = createId("task");
 let lastAnalysis = null;
 let latestSemanticMessage = null;
+let latestLocalSemanticPayload = null;
 let latestPlannerMessage = null;
 let latestPhysicalValidation = null;
 let latestReasoningTrace = null;
+let latestConditionalWorkflow = null;
 let activeExternalPlanId = null;
 let latestSemanticSource = { type: "live" };
 let latestInputSource = "text";
@@ -84,9 +86,15 @@ async function initialize() {
     buildAtomicIndex();
     loadMetaOperationLibrary(metaOperationLibrary);
     loadSpatialLocationLibrary(spatialLocationLibrary);
-    renderSpatialLocations();
     renderLibrary();
     renderAll();
+    const scenarioSelect = $("planner-scenario");
+    if (scenarioSelect) {
+      fetch("/api/planner/scenarios").then(response => response.json()).then(data => {
+        scenarioSelect.innerHTML = '<option value="auto">自动识别已登记场景</option>' +
+          (data.scenarios || []).map(scene => `<option value="${escapeHtml(scene.id)}">${escapeHtml(scene.name)}</option>`).join("");
+      }).catch(() => { /* Server-side resolution remains authoritative. */ });
+    }
   } catch (error) {
     $("operation-library").innerHTML =
       `<div class="empty">能力树读取失败，请通过本目录的启动脚本打开。<br>${escapeHtml(error.message)}</div>`;
@@ -99,45 +107,6 @@ function loadSpatialLocationLibrary(library) {
   spatialIndex = new Map(spatialLocations.map((location) => [location.id, location]));
 }
 
-function renderSpatialLocations() {
-  $("spatial-location-count").textContent = `${spatialLocations.length} 项`;
-  const building = spatialLocationLibrary?.building || {};
-  const coordinateFrame = spatialLocationLibrary?.coordinate_frame || {};
-  const buildingSummary = `
-    <article class="spatial-building-summary">
-      <strong>建筑坐标系</strong>
-      <p>${escapeHtml(coordinateFrame.origin_description || "尚未定义原点")}</p>
-      <div><span>${escapeHtml(`${building.floor_count || "--"}层建筑`)}</span><span>层高 ${escapeHtml(building.floor_height_m ?? "--")} m · ${building.floor_height_status === "verified" ? "已核验" : "暂定"}</span></div>
-    </article>`;
-  const locationCards = spatialLocations.map((location) => {
-    const pose = location.pose || {};
-    const geometry = location.geometry || {};
-    const dimensions = [geometry.length_m, geometry.width_m, geometry.height_m]
-      .every((value) => value !== undefined)
-      ? `尺寸：${geometry.length_m} × ${geometry.width_m} × ${geometry.height_m} m`
-      : "";
-    const status = location.placeholder ? "暂定位置" :
-      (location.status === "verified" ? "已标定" : "用户数据·待标定");
-    return `
-      <article class="spatial-location-card ${location.placeholder ? "placeholder" : (location.status === "verified" ? "verified" : "pending")}">
-        <div class="spatial-location-head"><strong>${escapeHtml(location.name)}</strong><span>${status}</span></div>
-        <code>${escapeHtml(location.id)}</code>
-        <p>${escapeHtml(`${location.floor} · ${location.room}`)}</p>
-        <p>${escapeHtml(location.pose_reference || "位置参考点")}：X ${escapeHtml(pose.x)} / Y ${escapeHtml(pose.y)} / Z ${escapeHtml(pose.z)} m</p>
-        ${dimensions ? `<p>${escapeHtml(dimensions)}</p>` : ""}
-        <p>姿态：R ${escapeHtml(pose.roll)}° / P ${escapeHtml(pose.pitch)}° / Y ${escapeHtml(pose.yaw)}°</p>
-      </article>`;
-  }).join("") || '<div class="empty compact-empty">尚未登记空间位置</div>';
-  const transportLinks = spatialLocationLibrary?.transport_links || [];
-  const transportSummary = transportLinks.map((link) => `
-    <article class="spatial-transport-card">
-      <div class="spatial-location-head"><strong>${escapeHtml(link.name)}</strong><span>${link.status === "verified" ? "已验证" : "暂定路线"}</span></div>
-      <code>${escapeHtml(link.id)}</code>
-      <p>${escapeHtml(`${link.from_location_id} → ${link.to_location_id}`)}</p>
-      <p>小车经电梯：1楼 → 3楼 · ${escapeHtml(link.execution_policy)}</p>
-    </article>`).join("");
-  $("spatial-location-list").innerHTML = buildingSummary + locationCards + transportSummary;
-}
 
 function loadMetaOperationLibrary(library) {
   metaOperationLibraryInfo = {
@@ -159,6 +128,7 @@ function loadMetaOperationLibrary(library) {
     input_hint: operation.input_hint || summarizeSchema(operation.inputs),
     output_hint: operation.output_hint || summarizeSchema(operation.outputs),
     execution_policy: operation.execution_policy,
+    is_legacy_composite: (operation.operation_tree?.children || []).length > 1,
     internal_operations: (operation.operation_tree?.children || []).map((node) => ({
       capability_id: node.node_ref,
       name: node.name,
@@ -166,6 +136,9 @@ function loadMetaOperationLibrary(library) {
       source_type: node.source_type
     })),
     physical_requirements: operation.physical_requirements || [],
+    aliases: operation.extensions?.aliases || [],
+    supported_objects: operation.extensions?.supported_objects || [],
+    control_requirements: operation.extensions?.control_requirements || [],
     capability_boundary: operation.capability_boundary || {},
     source: operation.source || {}
   }));
@@ -350,12 +323,47 @@ function buildLegacyMetaOperationLibrary() {
 }
 
 function bindStaticEvents() {
+  $("clarification-checklist")?.addEventListener("click", (event) => {
+    if (!event.target.closest?.("[data-apply-extraction-fields]")) return;
+    if (localPlanningInProgress) return;
+    const inputs = [...$("clarification-checklist").querySelectorAll("[data-extraction-field]")].filter(input => input.value.trim());
+    if (!inputs.length) return showToast("请至少填写一项待补参数");
+    for (const input of inputs) {
+      if (!input.checkValidity()) { input.reportValidity(); return; }
+    }
+    const values = inputs.map(input => `${input.dataset.label}：${input.dataset.inputType === "number" || !input.dataset.inputType ? Number(input.value) : input.value}${input.dataset.unit}`).join("；");
+    const existing = $("clarification-input").value.trim();
+    $("clarification-input").value = [existing, values].filter(Boolean).join("；");
+    $("clarification-submit").click();
+  });
+  window.autolabLocalSemantic = { plan: generateLocalSemanticPlan };
+  $("local-semantic-upload").addEventListener("click", () => $("local-semantic-file").click());
+  $("local-semantic-file").addEventListener("change", async () => {
+    const input = $("local-semantic-file");
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      if (file.size > 1024 * 1024) throw new Error("解析结果文件不能超过1MB");
+      await generateLocalSemanticPlan(JSON.parse((await file.text()).replace(/^\uFEFF/, "")));
+    } catch (error) {
+      showToast(`解析结果导入失败：${error.message || error}`);
+    } finally {
+      input.value = "";
+    }
+  });
   $("parse-intent").addEventListener("click", generateWorkflowFromPreprocessing);
   $("clarification-submit").addEventListener("click", async () => {
     const addition = $("clarification-input").value.trim();
     if (!addition) return showToast("请先填写需要补充的信息");
     if (localPlanningInProgress) return;
     const original = $("intent-input").value.trim();
+    if (latestLocalSemanticPayload && !semanticResultStale) {
+      const payload = JSON.parse(JSON.stringify(latestLocalSemanticPayload));
+      payload.originalText = `${original}\n补充信息：${addition}`;
+      $("clarification-input").value = "";
+      await generateLocalSemanticPlan(payload);
+      return;
+    }
     $("intent-input").value = `${original}\n补充信息：${addition}`;
     $("clarification-input").value = "";
     latestSemanticSource = { type: "clarification" };
@@ -371,6 +379,7 @@ function bindStaticEvents() {
     semanticResultStale = $("intent-input").value.trim() !==
       String(latestSemanticMessage.originalText || "").trim();
     if (semanticResultStale) {
+      latestLocalSemanticPayload = null;
       workflow = [];
       latestReasoningTrace = null;
       lastAnalysis = null;
@@ -444,6 +453,7 @@ function bindStaticEvents() {
 }
 
 function receiveSemanticParameters(message, source = { type: "live" }) {
+  latestLocalSemanticPayload = null;
   latestSemanticMessage = message && typeof message === "object" ? message : null;
   latestSemanticSource = source;
   if (["document", "history", "live"].includes(source.type)) latestInputSource = source.type === "live" ? "semantic" : source.type;
@@ -459,7 +469,7 @@ function receiveSemanticParameters(message, source = { type: "live" }) {
   renderAll();
 
   if (!latestSemanticMessage) showToast("收到的语义预处理结果格式无效");
-  else if (latestSemanticMessage.status === "failed") showToast("语义预处理失败，请查看 MQTT 返回结果");
+  else if (latestSemanticMessage.status === "failed") showToast("预处理需要确认，请查看提示信息");
   else if (latestSemanticMessage.clarification?.needed) showToast("预处理结果仍缺少必要字段，请补充后重新发送");
   else if (source.type === "local") showToast("已从自然语言提取本地预处理字段");
   else if (source.type === "document") showToast("委托单字段已载入，请核对待确认项后再生成流程");
@@ -471,9 +481,19 @@ function receivePlannerResult(message, sourceLabel = "外部任务编排接口�
   latestReasoningTrace = latestPlannerMessage?.plannerMetadata?.reasoningTrace ||
     latestPlannerMessage?.reasoning_trace || null;
   latestPhysicalValidation = null;
+  latestConditionalWorkflow = latestPlannerMessage?.workflow_definition || null;
   activeExternalPlanId = null;
   workflow = [];
   resetExecutionState();
+  if (latestConditionalWorkflow) {
+    const issues = latestPlannerMessage.warnings || [];
+    lastAnalysis = { matched: latestPlannerMessage.status === "success",
+      message: latestReasoningTrace?.decision?.status === "MODEL_ERROR" ? latestReasoningTrace.decision.message : issues.length ? `已生成${latestConditionalWorkflow.name || "实验"}草案，${issues.length}项参数或方法需要确认，请查看流程中的标记。` : "逻辑流程检查通过，待设备与现场确认。",
+      factors: [`场景：${latestConditionalWorkflow.name || "实验流程"}`, "条件流程：不转换为线性执行链", "物理状态：待确认，禁止直接执行"] };
+    renderAll();
+    showToast(lastAnalysis.matched ? "逻辑流程已生成" : "已生成实验草案，请补充标记内容");
+    return;
+  }
   if (!latestPlannerMessage || latestPlannerMessage.status === "failed") {
     const warnings = Array.isArray(latestPlannerMessage?.warnings) ? latestPlannerMessage.warnings : [];
     lastAnalysis = { matched: false, message: warnings.join("；") || "任务编排失败。", factors: [] };
@@ -687,6 +707,12 @@ function semanticValue(...keys) {
 
 function semanticFieldText(key, field) {
   const labels = {
+    operation_description: "操作要求",
+    source_object_id: "来源容器编号",
+    target_object_id: "目标容器编号",
+    source_object_name: "来源容器",
+    target_object_name: "目标容器",
+    volume_ml: "移液体积",
     test_item_description: "检测项目",
     mixing_requirement: "样品处理要求",
     sample_volume_requirement: "最低样品体积",
@@ -746,6 +772,10 @@ async function generateWorkflowFromPreprocessing() {
     showToast("请输入总体操作意图");
     return;
   }
+  if (latestLocalSemanticPayload && !semanticResultStale) {
+    await generateLocalSemanticPlan(latestLocalSemanticPayload);
+    return;
+  }
 
   const isMqttSemanticResult = latestSemanticSource.type === "live" &&
     typeof latestSemanticMessage?.workflowId === "string" &&
@@ -762,20 +792,40 @@ async function generateWorkflowFromPreprocessing() {
   }
   if (localPlanningInProgress) return;
 
-  const plannerMode = $("planner-mode")?.value || "rules";
-  if (plannerMode === "rules") latestReasoningTrace = null;
+  const plannerMode = $("planner-mode")?.value || "deepseek";
+  latestReasoningTrace = null;
+  latestConditionalWorkflow = null;
+  latestPlannerMessage = null;
+  latestPhysicalValidation = null;
+  activeExternalPlanId = null;
+  workflow = [];
+  resetExecutionState();
   localPlanningInProgress = true;
   $("parse-intent").disabled = true;
   lastAnalysis = {
     matched: false,
     message: plannerMode === "rules"
-      ? "正在通过自然语言编排接口生成流程..."
-      : `正在通过${plannerMode === "deepseek" ? "AI智能编排" : "AI智能编排（离线状态）"}生成逻辑计划...`,
+      ? "正在通过本地规则与场景模板生成流程..."
+      : `正在通过${plannerMode === "deepseek" ? "AI智能编排" : "本地规则编排（离线）"}生成逻辑计划...`,
     factors: []
   };
   renderAll();
+  let allowKeywordFallback = false;
   try {
     if (plannerMode === "rules") {
+      const selectionResponse = await fetch("/api/planner/resolve", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({text, scenario_id: $("planner-scenario")?.value || "auto"})
+      });
+      const selection = await selectionResponse.json();
+      if (!selectionResponse.ok) throw new Error(selection.detail || "场景解析失败");
+      if (selection.reason === "ambiguous") throw new Error(selection.message);
+      const explicitScene = $("planner-scenario")?.value && $("planner-scenario").value !== "auto";
+      if (selection.status === "resolved" && (selection.engine === "conditional" || explicitScene || selection.ui?.parameter_mode === "resolved_text")) {
+        await generateIntelligentPlan(text, "deterministic", selection);
+        return;
+      }
+      allowKeywordFallback = true;
       const response = await fetch("/api/v1/planning/from-text", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -786,17 +836,17 @@ async function generateWorkflowFromPreprocessing() {
       if (result.preprocessing) {
         receiveSemanticParameters(result.preprocessing, { type: "local_api" });
       }
-      receivePlannerResult(result, "本地关键词编排");
+      receivePlannerResult(result, "本地规则编排（关键词匹配）");
     } else {
       await generateIntelligentPlan(text, plannerMode);
     }
   } catch (error) {
-    if (plannerMode === "rules") {
+    if (plannerMode === "rules" && allowKeywordFallback) {
       showToast(`后端规则编排不可用，已切换到前端降级规则：${error.message || error}`);
       generateWorkflowLocally();
     } else {
       workflow = [];
-      lastAnalysis = { matched: false, message: `智能规划请求失败：${error.message || error}`, factors: [] };
+      lastAnalysis = { matched: false, message: `编排请求失败：${error.message || error}`, factors: [] };
       renderAll();
       showToast(lastAnalysis.message);
     }
@@ -806,7 +856,58 @@ async function generateWorkflowFromPreprocessing() {
   }
 }
 
-async function generateIntelligentPlan(text, modelMode) {
+async function generateLocalSemanticPlan(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    showToast("解析结果应为 JSON 对象");
+    return;
+  }
+  if (localPlanningInProgress) {
+    showToast("正在编排，请稍后再提交解析结果");
+    return;
+  }
+  localPlanningInProgress = true;
+  $("parse-intent").disabled = true;
+  $("local-semantic-upload").disabled = true;
+  let resolved = null;
+  try {
+    const response = await fetch("/api/v1/intent/from-semantic", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : `HTTP ${response.status}`);
+    if (!result.preprocessing) throw new Error("指代解析结果缺少预处理字段");
+    $("intent-input").value = result.resolvedText || result.preprocessing.originalText || "";
+    receiveSemanticParameters(result.preprocessing, { type: "local_json" });
+    latestLocalSemanticPayload = result.status === "success" ? null : JSON.parse(JSON.stringify(payload));
+    latestInputSource = "semantic";
+    $("local-semantic-json").textContent = JSON.stringify(result, null, 2);
+    $("local-semantic-result").hidden = false;
+    if (result.status === "success" && result.resolvedText) {
+      resolved = result;
+    } else {
+      lastAnalysis = { matched: false, message: (result.warnings || []).join("；") || "请补充明确的操作信息", factors: [] };
+      renderAll();
+    }
+  } catch (error) {
+    showToast(`本地解析结果编排失败：${error.message || error}`);
+  } finally {
+    localPlanningInProgress = false;
+    $("parse-intent").disabled = false;
+    $("local-semantic-upload").disabled = false;
+  }
+  if (resolved) await generateWorkflowFromPreprocessing();
+  return resolved;
+}
+
+async function generateIntelligentPlan(text, modelMode, resolvedSelection = null) {
+  const resolution = resolvedSelection ? null : await fetch("/api/planner/resolve", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, scenario_id: $("planner-scenario")?.value || "auto" })
+  });
+  const selected = resolvedSelection || await resolution.json();
+  if (resolution && !resolution.ok) throw new Error(selected.detail || "场景解析失败");
+  if (selected.status !== "resolved") throw new Error(`${selected.message} 可选：${(selected.candidates || []).map(item => item.name).join("、")}。请在智能规划选项中选择。`);
+  const liquidScene = selected.ui?.parameter_mode === "resolved_text";
   const semanticText = String(latestSemanticMessage?.originalText || "").trim();
   const supplement = latestSemanticSource.type === "clarification" && semanticText && text.startsWith(`${semanticText}\n补充信息：`)
     ? text.slice(semanticText.length + "\n补充信息：".length) : "";
@@ -819,7 +920,7 @@ async function generateIntelligentPlan(text, modelMode) {
   const inlineOperator = text.match(/(?:操作员|operator)\s*(?:为|是|[:：=])\s*([^\s，。；,;]+)/i)?.[1] || "";
   const operator = String(inlineOperator || (currentSemanticMatches ? semanticValue("operator") : null) || "").trim();
   const readResults = $("planner-read-results")?.checked !== false;
-  if (!handoffConfirmed) throw new Error("请明确勾选“样品交接已确认”");
+  if (selected.ui?.handoff_required && !handoffConfirmed) throw new Error("请明确勾选“样品交接已确认”");
 
   const requestedTests = currentSemanticMatches ? String(semanticValue("requested_tests") || "")
     .split(/[；;、]/).map((item) => item.trim()).filter(Boolean) : [];
@@ -840,18 +941,18 @@ async function generateIntelligentPlan(text, modelMode) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      scenario_id: "vd10_single_sample_demo",
+      scenario_id: selected.scenario_id,
       knowledge_mode: "demo",
       model_mode: modelMode,
       workflow_id: workflowId,
       text,
-      task_intent: taskIntent,
-      parameters: {
+      task_intent: liquidScene ? { source: latestInputSource } : taskIntent,
+      parameters: liquidScene ? {} : {
         sample_id: sampleId || null,
         handoff_confirmed: handoffConfirmed,
         operator: operator || null
       },
-      read_results: readResults,
+      read_results: selected.ui?.read_results ?? readResults,
       measurement_repeats: 1
     })
   });
@@ -859,6 +960,15 @@ async function generateIntelligentPlan(text, modelMode) {
   if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
 
   const issues = Array.isArray(result.issues) ? result.issues : [];
+  if (result.workflow_definition) {
+    receivePlannerResult({
+      status: result.status === "logical_pass" ? "success" : "failed",
+      workflow_definition: result.workflow_definition,
+      warnings: issues.map(formatPlannerIssue).filter(Boolean),
+      plannerMetadata: { reasoningTrace: result.reasoning_trace || null }
+    }, "通用条件流程编排接口");
+    return;
+  }
   if (result.status !== "logical_pass") {
     const message = issues.map(formatPlannerIssue).filter(Boolean).join("；") ||
       `规划未通过：${result.status || "unknown"}`;
@@ -881,7 +991,7 @@ async function generateIntelligentPlan(text, modelMode) {
       capabilityLibrary: {
         id: result.knowledge?.source_library_id,
         version: result.knowledge?.source_library_version,
-        checksum: result.knowledge?.sha256 ? `sha256:${result.knowledge.sha256}` : ""
+        checksum: result.knowledge?.source_library_checksum || result.reasoning_trace?.capability_library?.checksum || (result.knowledge?.sha256 ? `sha256:${result.knowledge.sha256}` : "")
       },
       operations: steps.map((step, index) => ({
         stepId: step.step_id,
@@ -906,7 +1016,7 @@ async function generateIntelligentPlan(text, modelMode) {
   };
   receivePlannerResult(
     normalized,
-    modelMode === "deepseek" ? "AI智能编排" : "AI智能编排（离线状态）"
+    modelMode === "deepseek" ? "AI智能编排" : "本地规则编排（场景模板）"
   );
   if (lastAnalysis?.matched) {
     lastAnalysis.factors.push(`模型运行时：${result.generation?.runtime || modelMode}`);
@@ -981,9 +1091,10 @@ function renderLibrary() {
   const query = $("library-search").value.trim().toLowerCase();
   const categorySections = Object.entries(CATEGORY_INFO).map(([category, info]) => {
     const items = metaOperations.filter((operation) => {
-      const text = `${operation.name} ${operation.meta_operation_id} ${operation.description}`.toLowerCase();
+      const text = `${operation.name} ${operation.meta_operation_id} ${operation.description} ${operation.aliases.join(" ")} ${operation.supported_objects.join(" ")} ${operation.control_requirements.join(" ")}`.toLowerCase();
       return operation.category === category && (!query || text.includes(query));
     }).sort((left, right) => {
+      if (left.is_legacy_composite !== right.is_legacy_composite) return left.is_legacy_composite ? 1 : -1;
       const leftPriority = FOUNDATION_OPERATION_IDS.has(left.meta_operation_id) ? 0 : 1;
       const rightPriority = FOUNDATION_OPERATION_IDS.has(right.meta_operation_id) ? 0 : 1;
       return leftPriority - rightPriority;
@@ -1040,14 +1151,16 @@ function renderMetaOperation(operation) {
   return `
     <li class="op-card" draggable="true" data-id="${escapeHtml(operation.meta_operation_id)}">
       <div class="op-info">
-        <div class="op-name-row"><strong>${escapeHtml(operation.name)}</strong><span class="op-status status-${escapeHtml(operation.status)}">${escapeHtml(statusLabels[operation.status] || operation.status)}</span></div>
+        <div class="op-name-row"><strong>${escapeHtml(operation.name)}</strong><span class="op-status">${operation.is_legacy_composite ? "历史组合" : "单步动作"}</span><span class="op-status status-${escapeHtml(operation.status)}">${escapeHtml(statusLabels[operation.status] || operation.status)}</span></div>
         <details class="operation-details">
-          <summary>查看说明与内部操作树</summary>
+          <summary>${operation.is_legacy_composite ? "查看历史组合与内部操作树" : "查看单步动作说明"}</summary>
           <p>${escapeHtml(operation.description)}</p>
+          ${operation.supported_objects.length ? `<p><b>涉及对象：</b>${escapeHtml(operation.supported_objects.join("、"))}</p>` : ""}
+          ${operation.control_requirements.length ? `<p><b>关键控制要求：</b>${escapeHtml(operation.control_requirements.join("；"))}</p>` : ""}
           <p><b>输入：</b>${escapeHtml(operation.input_hint)}</p>
           <p><b>输出：</b>${escapeHtml(operation.output_hint)}</p>
           <div class="operation-tree">
-            <span>内部操作树 · ${operation.internal_operations.length} 个小操作</span>
+            <span>${operation.is_legacy_composite ? "历史组合" : "单步动作定义"} · ${operation.internal_operations.length} 个节点</span>
           <ol>${operation.internal_operations.map((step) =>
             `<li>${escapeHtml(step.name)}<code>${escapeHtml(step.capability_id)}</code></li>`
           ).join("")}</ol>
@@ -1079,6 +1192,7 @@ function addMetaOperation(metaId, options = {}) {
 }
 
 function invalidateReasoningTrace(message) {
+  latestConditionalWorkflow = null;
   if (!latestReasoningTrace) return;
   const checks = latestReasoningTrace.validation || {};
   [
@@ -1475,6 +1589,15 @@ function physicalMessage(step) {
 }
 
 function renderAll() {
+  if (!latestReasoningTrace) latestConditionalWorkflow = null;
+  const checklist = $("clarification-checklist");
+  if (checklist) {
+    checklist.hidden = !latestConditionalWorkflow;
+    checklist.innerHTML = latestConditionalWorkflow ? renderConfiguredClarifications(latestConditionalWorkflow) : "";
+  }
+  $("clarification-input").placeholder = latestConditionalWorkflow
+    ? "可直接填写下方清单，也可在此按“参数名：数值单位”补充；方法审核问题需先由维护者处理。"
+    : "例如：目标仪器是 VD10，检测项目为蒸馏特性；样品编号为 S-001";
   const validation = validateWorkflow();
   renderReasoningTrace();
   renderFlow(validation);
@@ -1496,7 +1619,7 @@ function renderReasoningTrace() {
       : "当系统提示目标、设备或参数不明确时，在这里补充后重新编排。";
     decisionNode.textContent = "尚未生成";
     decisionNode.className = "trace-decision";
-    container.innerHTML = '<div class="empty compact-empty">选择AI智能编排并生成流程后显示</div>';
+    container.innerHTML = '<div class="empty compact-empty">选择已登记实验场景并生成流程后显示</div>';
     return;
   }
 
@@ -1530,6 +1653,12 @@ function renderReasoningTrace() {
   $("clarification-hint").textContent = clarificationItems.length
     ? `待处理：${clarificationItems.map((goal) => goal.description).join("、")}。请补充事实；不支持的能力不能仅靠补充文字变为可执行。`
     : "如需补充任务事实，可在此输入并重新编排。";
+  if (latestConditionalWorkflow) {
+    const missing = [...new Set(trace.validation?.missing_parameters || [])];
+    $("clarification-hint").textContent = missing.length
+      ? `需要补充 ${missing.length} 项参数。完整名称、单位和用途已列在下方“本次需要补充什么”中，可直接逐项填写。`
+      : "请核对实验方法及设备条件；具体待处理内容见流程标记。";
+  }
   const coveredGoalCount = goalItems.filter((goal) => goal.status === "covered").length;
   const matchedGoalCount = goalItems.filter((goal) => goal.status === "capability_matched").length;
   const uncoveredGoalCount = goalItems.length - coveredGoalCount;
@@ -1562,7 +1691,7 @@ function renderReasoningTrace() {
   };
   const goals = goalItems.map(renderGoal).join("");
   const candidateGoals = scenarioGoals.map(renderGoal).join("");
-  const cotFlow = renderCotDiagram(trace, goalItems, decisionLabels);
+  const cotFlow = latestConditionalWorkflow ? renderConfiguredWorkflow(latestConditionalWorkflow) : renderCotDiagram(trace, goalItems, decisionLabels);
   const mappings = (trace.mappings || []).map((mapping) => {
     const inputs = (mapping.inputs || []).map((input) =>
       `${input.name}=${traceDisplayValue(input.value)} ← ${input.source || "无来源"}`
@@ -1601,7 +1730,7 @@ function renderReasoningTrace() {
     <details class="cot-evidence"><summary>查看事实、映射和校验明细</summary>
     <section class="trace-section"><h3>1. 输入事实与来源</h3><div class="trace-facts">${facts || '<span class="muted">无事实</span>'}</div></section>
     <section class="trace-section"><h3>2. 用户目标（已验证覆盖 ${coveredGoalCount}/${goalItems.length}，能力匹配未编排 ${matchedGoalCount}，未验证覆盖 ${uncoveredGoalCount}）</h3><div class="trace-goals">${goals || '<span class="muted">无目标</span>'}</div></section>
-    <section class="trace-section"><h3>VD10场景候选操作（仅能力匹配不代表任务可执行）</h3><div class="trace-goals">${candidateGoals || '<span class="muted">无候选操作</span>'}</div></section>
+    <section class="trace-section"><h3>可选操作（匹配到操作后仍需检查执行条件）</h3><div class="trace-goals">${candidateGoals || '<span class="muted">无候选操作</span>'}</div></section>
     <section class="trace-section"><h3>3. 任务对应的操作</h3>${mappings || '<div class="trace-empty">尚未确定对应操作</div>'}</section>
     <section class="trace-section"><h3>4. 操作链内部校验</h3><div class="trace-checks">${validations}</div>${unresolved.length ? `<div class="trace-unresolved">未解决：${escapeHtml(unresolved.join("；"))}</div>` : ""}</section>
     <section class="trace-decision-card ${decisionClass}"><b>${escapeHtml(decisionLabels[decision.status] || decision.status || "未知状态")}</b><p>${escapeHtml(traceUserText(decision.message, trace))}</p></section></details>`;
@@ -1650,64 +1779,90 @@ function traceUserText(value, trace) {
 
 function renderCotDiagram(trace, goals, decisionLabels) {
   const center = 380;
-  const crop = (value, limit = 22) => {
-    const text = String(value || "");
-    return escapeHtml(text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
+  const shapes = [];
+  const links = [];
+  const wrap = (value, width, fontSize) => {
+    const lines = [];
+    for (const paragraph of String(value || "").split("\n")) {
+      let line = "";
+      let lineWidth = 0;
+      for (const character of Array.from(paragraph)) {
+        const characterWidth = fontSize * (/[^\x00-\x7f]/.test(character) ? 1.05 : 0.65);
+        if (line && lineWidth + characterWidth > width) {
+          lines.push(line);
+          line = "";
+          lineWidth = 0;
+        }
+        line += character;
+        lineWidth += characterWidth;
+      }
+      lines.push(line);
+    }
+    return lines;
   };
+  const textLines = (lines, x, y, spacing, className) =>
+    `<text class="${className}">${lines.map((line, index) => `<tspan x="${x}" y="${y + index * spacing}">${escapeHtml(line)}</tspan>`).join("")}</text>`;
   const edge = (x1, y1, x2, y2, label = "", color = "#8fa3c4") =>
     `<path d="M${x1} ${y1} L${x2} ${y2}" fill="none" stroke="${color}" stroke-width="1.7" marker-end="url(#cot-arrow)"/>${label ? `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 5}" class="cot-edge-label">${label}</text>` : ""}`;
-  const box = (x, y, width, title, detail, state = "candidate") =>
-    `<g class="cot-svg-node ${state}"><title>${escapeHtml(`${title}：${detail}`)}</title><rect x="${x}" y="${y}" width="${width}" height="52" rx="7"/><text x="${x + width / 2}" y="${y + 21}" class="cot-svg-title">${crop(title, 13)}</text><text x="${x + width / 2}" y="${y + 39}" class="cot-svg-detail">${crop(detail, 16)}</text></g>`;
-  const diamond = (y, title, detail) =>
-    `<g class="cot-svg-decision"><title>${escapeHtml(`${title}：${detail}`)}</title><polygon points="${center},${y - 38} ${center + 102},${y} ${center},${y + 38} ${center - 102},${y}"/><text x="${center}" y="${y - 2}" class="cot-svg-title">${crop(title, 15)}</text><text x="${center}" y="${y + 13}" class="cot-svg-detail">${crop(detail, 17)}</text></g>`;
-  const shapes = [box(275, 12, 210, "任务输入", trace.facts?.find((fact) => fact.name === "user_intent")?.value || "当前任务", "start")];
-  const links = [];
-  let nextY = 140;
-  for (const goal of goals) {
-    const y = nextY;
-    links.push(edge(center, y === 140 ? 64 : y - 78, center, y - 40));
-    shapes.push(diamond(y, traceUserText(goal.description, trace), "现有仪器和操作能否完成？"));
+  const box = (x, y, width, title, detail, state = "candidate") => {
+    const titleLines = wrap(title, width - 28, 13);
+    const detailLines = detail ? wrap(detail, width - 28, 11) : [];
+    const height = 24 + titleLines.length * 18 + (detailLines.length ? 6 + detailLines.length * 16 : 0);
+    shapes.push(`<g class="cot-svg-node ${state}"><title>${escapeHtml(`${title}：${detail}`)}</title><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="7"/>${textLines(titleLines, x + width / 2, y + 24, 18, "cot-svg-title")}${textLines(detailLines, x + width / 2, y + 24 + titleLines.length * 18 + 6, 16, "cot-svg-detail")}</g>`);
+    return { top: y, bottom: y + height, centerY: y + height / 2, centerX: x + width / 2 };
+  };
+  const diamond = (top, title, detail) => {
+    const y = top + 52;
+    const titleLines = wrap(title, 135, 13);
+    shapes.push(`<g class="cot-svg-decision"><title>${escapeHtml(`${title}：${detail}`)}</title><polygon points="${center},${top} ${center + 110},${y} ${center},${top + 104} ${center - 110},${y}"/>${textLines(titleLines, center, y - (titleLines.length - 1) * 9 - 5, 18, "cot-svg-title")}${textLines([detail], center, y + 24, 16, "cot-svg-detail")}</g>`);
+    return { top, bottom: top + 104, centerY: y };
+  };
+  const input = box(250, 12, 260, "任务输入", trace.facts?.find((fact) => fact.name === "user_intent")?.value || "当前任务", "start");
+  let cursor = input.bottom + 40;
+  links.push(edge(center, input.bottom, center, cursor - 2));
+  for (const [index, goal] of goals.entries()) {
     const matched = ["covered", "capability_matched"].includes(goal.status);
-    const needsInput = goal.status === "needs_input";
+    const needsInput = ["needs_input", "pending"].includes(goal.status);
+    const candidates = (goal.covered_by?.length ? goal.covered_by : goal.candidate_operations) || [];
+    const detail = [traceUserText(goal.description, trace),
+      matched ? `${goal.status === "covered" ? "对应操作" : "可选操作（待编排）"}：${candidates.map((id) => traceOperationName(id, trace)).join("、")}` : ""
+    ].filter(Boolean).join("\n");
+    const requirement = box(250, cursor, 260, `任务要求 ${index + 1}`, detail, matched ? "pass" : "candidate");
+    const check = diamond(requirement.bottom + 30, "现有操作支持吗？", "逐项检查要求");
+    links.push(edge(center, requirement.bottom, center, check.top - 2));
     if (matched) {
-      const candidates = (goal.covered_by?.length ? goal.covered_by : goal.candidate_operations) || [];
-      links.push(edge(center - 104, y, 234, y, "是", "#59ce92"));
-      shapes.push(box(12, y - 26, 220, goal.status === "covered" ? "已匹配所需操作" : "操作支持，待安排", candidates.map((id) => traceOperationName(id, trace)).join("、") || traceUserText(goal.reason, trace), goal.status === "covered" ? "pass" : "candidate"));
+      cursor = check.bottom + 52;
+      links.push(edge(center, check.bottom, center, cursor - 2, "是", "#59ce92"));
     } else {
-      links.push(edge(center + 104, y, 528, y, "否", needsInput ? "#eacb65" : "#ef7b89"));
-      shapes.push(box(530, y - 26, 218, needsInput ? "需要补充信息" : goal.status === "scenario_blocked" ? "当前流程暂不支持" : "暂时无法完成", traceUserText(goal.reason || goal.description, trace), needsInput ? "warning" : "blocked"));
+      const problem = box(540, check.centerY - 26, 218, needsInput ? "需要补充信息" : goal.status === "scenario_blocked" ? "当前流程暂不支持" : "暂时无法完成", traceUserText(goal.reason || goal.description, trace), needsInput ? "warning" : "blocked");
+      links.push(edge(center + 110, check.centerY, 538, check.centerY, "否", needsInput ? "#eacb65" : "#ef7b89"));
+      cursor = Math.max(check.bottom, problem.bottom) + 64;
+      links.push(`<path d="M${problem.centerX} ${problem.bottom} V${cursor - 28} H${center} V${cursor - 2}" fill="none" stroke="#8fa3c4" stroke-width="1.7" stroke-dasharray="5 4" marker-end="url(#cot-arrow)"/><text x="${(problem.centerX + center) / 2}" y="${cursor - 34}" class="cot-edge-label">记录问题，继续检查</text>`);
     }
-    nextY += 116;
   }
   const mappings = trace.mappings || [];
-  const operationY = nextY - 10;
-  links.push(edge(center, goals.length ? nextY - 78 : 64, center, operationY - 2));
-  if (mappings.length) {
-    let previousBottom = operationY;
+  const overall = diamond(cursor, "流程检查通过吗？", "要求、信息与顺序");
+  let bottom = overall.bottom;
+  if (trace.decision?.logical_executable && goals.every((goal) => goal.status === "covered") && mappings.length) {
+    cursor = overall.bottom + 52;
+    links.push(edge(center, overall.bottom, center, cursor - 2, "是", "#59ce92"));
     for (const [index, mapping] of mappings.entries()) {
-      const y = operationY + index * 76;
-      if (index > 0) links.push(edge(center, previousBottom, center, y - 2));
       const operation = metaIndex.get(mapping.operation_id);
-      shapes.push(box(275, y, 210, `${index + 1}. ${traceUserText(mapping.operation_name || traceOperationName(mapping.operation_id, trace), trace)}`, traceUserText(operation?.description || "按顺序完成此操作", trace), trace.decision?.logical_executable ? "pass" : "candidate"));
-      previousBottom = y + 52;
+      const node = box(250, cursor, 260, `${index + 1}. ${traceUserText(mapping.operation_name || traceOperationName(mapping.operation_id, trace), trace)}`, traceUserText(operation?.description || "按顺序完成此操作", trace), "pass");
+      cursor = node.bottom + 36;
+      links.push(edge(center, node.bottom, center, cursor - 2));
     }
-    nextY = previousBottom + 72;
-    links.push(edge(center, previousBottom, center, nextY - 40));
+    const physicalBlocked = trace.decision.status === "PHYSICAL_BLOCKED";
+    bottom = box(250, cursor, 260, decisionLabels[trace.decision.status] || "流程检查通过", traceUserText(trace.decision.message || "等待设备与现场条件确认", trace), physicalBlocked ? "blocked" : "pass").bottom;
   } else {
-    shapes.push(box(275, operationY, 210, "尚未生成操作步骤", "请确认提示信息后重新生成", "warning"));
-    nextY = operationY + 120;
-    links.push(edge(center, operationY + 52, center, nextY - 40));
+    const message = [traceUserText(trace.decision?.message || "请补充或调整任务后重新编排", trace),
+      mappings.length ? "已有候选步骤尚未通过检查，详见下方明细。" : "尚未生成操作步骤。"
+    ].join("\n");
+    const issue = box(540, overall.centerY - 26, 218, decisionLabels[trace.decision?.status] || "当前不可执行", message, trace.decision?.status === "NEEDS_INPUT" ? "warning" : "blocked");
+    links.push(edge(center + 110, overall.centerY, 538, overall.centerY, "否", "#ef7b89"));
+    bottom = Math.max(bottom, issue.bottom);
   }
-  shapes.push(diamond(nextY, "整体流程检查", "任务要求、信息与操作顺序"));
-  if (trace.decision?.logical_executable) {
-    links.push(edge(center, nextY + 40, center, nextY + 62, "是", "#59ce92"));
-    shapes.push(box(275, nextY + 64, 210, "流程检查通过", "等待设备与现场条件确认", "pass"));
-  } else {
-    links.push(edge(center + 104, nextY, 528, nextY, "否", "#ef7b89"));
-    shapes.push(box(530, nextY - 26, 218, decisionLabels[trace.decision?.status] || "当前不可执行", traceUserText(trace.decision?.message || "需要补充或调整任务", trace), "blocked"));
-  }
-  const height = nextY + 130;
-  return `<div class="cot-diagram" role="img" aria-label="任务检查与操作步骤流程图"><div class="cot-diagram-canvas"><svg viewBox="0 0 760 ${height}" xmlns="http://www.w3.org/2000/svg"><defs><marker id="cot-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#9aa9c1"/></marker></defs>${links.join("")}${shapes.join("")}</svg></div></div>`;
+  return `<div class="cot-diagram" role="img" aria-label="任务检查与操作步骤流程图"><div class="cot-diagram-canvas"><svg viewBox="0 0 780 ${bottom + 24}" xmlns="http://www.w3.org/2000/svg"><defs><marker id="cot-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#9aa9c1"/></marker></defs>${links.join("")}${shapes.join("")}</svg></div></div>`;
 }
 
 function traceDisplayValue(value) {
@@ -1717,6 +1872,15 @@ function traceDisplayValue(value) {
 }
 
 function renderFlow(validation) {
+  if (latestConditionalWorkflow) {
+    $("semantic-flow").innerHTML = '<li class="empty">条件流程见上方阶段总览；恒重与异常分支不会转换为一次性线性操作链。</li>';
+    $("physical-flow").innerHTML = '<li class="empty">设备、控制配置、空间位置和实验方法尚需独立确认，当前禁止执行。</li>';
+    $("semantic-state").textContent = lastAnalysis?.matched ? "逻辑检查通过" : "草案待补充";
+    $("physical-state").textContent = "待独立确认";
+    $("simulate-execution").disabled = true;
+    return;
+  }
+  $("simulate-execution").disabled = false;
   $("semantic-flow").innerHTML = workflow.map((step, index) =>
     renderFlowCard(step, index, validation, false)
   ).join("");
@@ -1789,6 +1953,11 @@ function renderFlowCard(step, index, validation, physicalStage) {
 function formatParameterSummary(params) {
   const labels = {
     target_count: "数量",
+    source_object_id: "来源容器编号",
+    target_object_id: "目标容器编号",
+    source_object_name: "来源容器",
+    target_object_name: "目标容器",
+    volume_ml: "移液体积",
     sample_count: "样品数",
     volume_each: "单份体积",
     sample_volume: "样品体积",
@@ -1816,6 +1985,7 @@ function formatParameterSummary(params) {
   });
   return values.map(([key, value]) => {
     let display = Array.isArray(value) ? value.join("、") : String(value);
+    if (key === "volume_ml") display = `${display} mL`;
     if ((key === "target_count" || key === "sample_count") && /^\d+$/.test(display)) {
       display = `${display}份`;
     }
@@ -1833,6 +2003,7 @@ function renderIntentSummary() {
     history: "历史语义记录",
     local: "自然语言本地提取",
     local_api: "自然语言编排接口",
+    local_json: "本地解析结果 JSON",
     document: "委托单文档识别",
     live: "实时 MQTT 回包"
   };
@@ -1867,7 +2038,8 @@ function renderIntentSummary() {
     ? chips.join("")
     : '<span class="chip muted">等待 MQTT 返回预处理字段</span>';
 
-  if (semanticResultStale) $("intent-state").textContent = "预处理结果已过期";
+  if (latestConditionalWorkflow) $("intent-state").textContent = lastAnalysis?.matched ? "逻辑流程已生成" : "实验草案待补充";
+  else if (semanticResultStale) $("intent-state").textContent = "预处理结果已过期";
   else if (!latestSemanticMessage) $("intent-state").textContent = "等待预处理";
   else if (latestSemanticMessage.status === "failed") $("intent-state").textContent = "预处理失败";
   else if (clarification.needed) $("intent-state").textContent = "需要补充信息";

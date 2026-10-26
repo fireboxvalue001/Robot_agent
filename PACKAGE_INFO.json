@@ -18,7 +18,9 @@
       "autolab/planner/result",
       "autolab/physical/validation"
     ],
-    "mqtt_ui_input_optional_fields": ["asrTiming"],
+    "mqtt_ui_input_optional_fields": [
+      "asrTiming"
+    ],
     "mqtt_history": "data/mqtt_history/YYYY-MM-DD.jsonl"
   },
   "source_data": {
@@ -31,16 +33,21 @@
     "transport_links": 1,
     "building_floors": 3,
     "atomic_vd10_capabilities": 16,
-    "instrument_groups": 5,
-    "instrument_meta_operations": 13,
-    "robot_meta_operations": 24,
-    "laboratory_meta_operations": 4,
-    "total_meta_operations": 41
+    "instrument_groups": 10,
+    "instrument_meta_operations": 25,
+    "robot_meta_operations": 63,
+    "laboratory_meta_operations": 5,
+    "total_meta_operations": 93,
+    "single_action_operations": 55,
+    "legacy_composite_operations": 38,
+    "robot_action_templates": "data/robot-action-templates.json"
   },
   "handoff": {
     "format_status": "prototype_meta_operation_handoff",
     "required_files": [
       "data/meta-operations.json",
+      "data/robot-action-templates.json",
+      "docs/ROBOT_ACTION_CAPABILITIES.md",
       "schemas/meta-operation-library.schema.json",
       "schemas/semantic-params.schema.json",
       "schemas/planner-result.schema.json",
@@ -50,7 +57,15 @@
       "data/vd10_agent_only_operation_tree.json",
       "docs/META_OPERATION_SPEC.md",
       "docs/META_OPERATION_HANDOFF.md",
-      "docs/MODULE_INTERFACE_HANDOFF.md"
+      "docs/MODULE_INTERFACE_HANDOFF.md",
+      "knowledge/planner_scenarios/leather_extraction.json",
+      "schemas/conditional-workflow.schema.json",
+      "data/leather-extraction-resources.json",
+      "docs/LEATHER_EXTRACTION.md",
+      "knowledge/planner_scenarios/registry.json",
+      "knowledge/planner_scenarios/sample_hold.json",
+      "schemas/process-scenario.schema.json",
+      "docs/CONFIGURED_WORKFLOWS.md"
     ],
     "legacy_schema": "schemas/agan_vd10_handoff.schema.json",
     "legacy_schema_compatible": false,

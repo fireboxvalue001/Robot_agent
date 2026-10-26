@@ -1,0 +1,20 @@
+{
+  "type": "semantic_params",
+  "originalText": "把这个的10ml加到这个里面。",
+  "parameters": {
+    "intent": "add_to",
+    "operations": [
+      {
+        "operationId": "op_001",
+        "action": "add",
+        "arguments": {
+          "sourceObject": { "objectId": "bottle_1", "objectName": "瓶子1" },
+          "targetObject": { "objectId": "bottle_2", "objectName": "瓶子2" }
+        }
+      }
+    ],
+    "operationDescription": "将瓶子1加入瓶子2中",
+    "unresolved": [],
+    "confidence": 0.7641
+  }
+}

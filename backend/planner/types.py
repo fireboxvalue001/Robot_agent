@@ -13,6 +13,11 @@ class StrictModel(BaseModel):
 
 
 class SampleParameters(StrictModel):
+    source_object_id: str | None = Field(default=None, min_length=1, max_length=100)
+    target_object_id: str | None = Field(default=None, min_length=1, max_length=100)
+    source_object_name: str | None = Field(default=None, min_length=1, max_length=100)
+    target_object_name: str | None = Field(default=None, min_length=1, max_length=100)
+    volume_ml: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     sample_id: str | None = Field(default=None, min_length=1, max_length=100)
     handoff_confirmed: bool | None = None
     operator: str | None = Field(default=None, min_length=1, max_length=100)
@@ -33,7 +38,7 @@ class PlannerRequest(StrictModel):
     model_mode: Literal["deepseek", "deterministic"] = "deepseek"
     workflow_id: str | None = Field(default=None, min_length=1, max_length=120)
     text: str = Field(min_length=1, max_length=10000)
-    parameters: SampleParameters
+    parameters: SampleParameters = Field(default_factory=SampleParameters)
     task_intent: TaskIntent | None = None
     read_results: bool = True
     measurement_repeats: int = Field(default=1, ge=1, le=10)
@@ -82,3 +87,4 @@ class PlannerResult(StrictModel):
     evidence: list[dict]
     generation: dict
     reasoning_trace: dict = Field(default_factory=dict)
+    workflow_definition: dict | None = None

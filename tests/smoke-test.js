@@ -9,6 +9,7 @@ const plannerCss = fs.readFileSync(path.join(root, "planner-controls.css"), "utf
 const elements = new Map();
 const windowListeners = new Map();
 let lastIntelligentRequest = null;
+let lastLocalSemanticRequest = null;
 const diagramStub = {
   scrollWidth: 900,
   clientWidth: 600,
@@ -73,9 +74,49 @@ global.CustomEvent = class CustomEvent {
 };
 
 global.fetch = async (resource, options = {}) => {
+  if (String(resource).includes("/api/planner/scenarios")) {
+    return { ok: true, json: async () => JSON.parse(fs.readFileSync(path.join(root, "knowledge/planner_scenarios/registry.json"), "utf8")) };
+  }
+  if (String(resource).includes("/api/planner/resolve")) {
+    const request = JSON.parse(options.body);
+    const scenes = JSON.parse(fs.readFileSync(path.join(root, "knowledge/planner_scenarios/registry.json"), "utf8")).scenarios;
+    const scene = scenes.find(item => request.scenario_id !== "auto" ? item.id === request.scenario_id : item.routing_patterns.some(pattern => new RegExp(pattern, "i").test(request.text)));
+    return { ok: true, json: async () => scene ? { status:"resolved", scenario_id:scene.id, name:scene.name, engine:scene.engine, ui:scene.ui } : { status:"needs_input", message:"请选择场景", candidates:[] } };
+  }
+  if (String(resource).includes("/api/v1/intent/from-semantic")) {
+    const payload = JSON.parse(options.body);
+    lastLocalSemanticRequest = payload;
+    const source = payload.parameters.operations[0].arguments.sourceObject;
+    const target = payload.parameters.operations[0].arguments.targetObject;
+    const complete = payload.originalText.includes("10ml");
+    const resolvedText = `从${source.objectName}（容器编号：${source.objectId}）中吸取10mL液体，加入${target.objectName}（容器编号：${target.objectId}）中。`;
+    const parameters = {
+      source_object_name: { type: "string", value: source.objectName },
+      target_object_name: { type: "string", value: target.objectName },
+      ...(complete ? { volume_ml: { type: "number", value: 10, unit: "mL" } } : {})
+    };
+    return { ok: true, json: async () => ({
+      type: "resolved_intent", status: complete ? "success" : "failed", workflowId: "wf_local_json", resolvedText: complete ? resolvedText : null,
+      preprocessing: {
+        originalText: complete ? resolvedText : payload.originalText, workflowId: "wf_local_json", status: complete ? "success" : "failed", parameters,
+        clarification: { needed: !complete, missingFields: complete ? [] : ["volume"], questions: complete ? [] : ["请补充移液体积"] }
+      },
+      warnings: complete ? [] : ["请补充移液体积"]
+    }) };
+  }
   if (String(resource).includes("/api/planner/plan")) {
     const request = JSON.parse(options.body || "{}");
     lastIntelligentRequest = request;
+    if (request.scenario_id === "liquid_transfer_demo") {
+      return { ok: true, json: async () => ({
+        schema_version: "0.2.0", plan_id: "plan_liquid_ai", workflow_id: request.workflow_id,
+        status: "logical_pass", issues: [], physical_status: "not_evaluated", execution_allowed: false,
+        knowledge: { source_library_id: "autolab.vd10.meta_operations", source_library_version: "1.7.1" },
+        generation: { runtime: request.model_mode === "deepseek" ? "deepseek_api" : "deterministic", network_inference: request.model_mode === "deepseek" },
+        steps: [{ step_id: "s01", operation_id: "robot.meta.transfer_liquid", operation_version: "1.0.0", name: "容器间定量移液",
+          parameters: { source_object_id: "bottle_1", target_object_id: "bottle_2", source_object_name: "瓶子1", target_object_name: "瓶子2", volume_ml: 10 }, depends_on: [] }]
+      }) };
+    }
     const sampleDeferred = !request.parameters.sample_id;
     const operationIds = request.read_results === false
       ? [
@@ -102,7 +143,7 @@ global.fetch = async (resource, options = {}) => {
         execution_allowed: false,
         knowledge: {
           source_library_id: "autolab.vd10.meta_operations",
-          source_library_version: "1.4.0",
+          source_library_version: "1.7.1",
           sha256: "test"
         },
         steps: operationIds.map((operationId, index) => ({
@@ -216,7 +257,12 @@ setTimeout(async () => {
   const parseButton = elements.get("parse-intent");
   const defaultText = elements.get("intent-input").value;
 
-  assert(elements.get("operation-count").textContent === "41 项", "the interface should show all 41 meta operations");
+  assert(elements.get("operation-count").textContent === "93 项", "the interface should show single actions and compatibility entries");
+  assert(elements.get("operation-library").innerHTML.includes("历史组合"), "legacy multi-action entries must be visibly distinguished");
+  for (const name of ["包络式稳定抓取", "持物搬运", "释放物体", "指尖精细捏取", "持瓶扶正或回正", "托盘孔位对准", "旋开瓶盖", "旋紧瓶盖", "密封面受控预压", "持瓶受控倾斜", "受控倾倒液体", "小幅持瓶振荡摇匀", "插入枪头或软塞", "拔出枪头或软塞", "药勺取样", "固体样品留样释放", "定量吸液", "定量排液", "玻璃棒引流", "识别样品身份与位置", "判定样品分类", "仪器面板按键轻按"]) {
+    assert(elements.get("operation-library").innerHTML.includes(name), `single action must be visible: ${name}`);
+  }
+  assert(elements.get("operation-library").innerHTML.includes("关键控制要求"), "action control constraints must be visible in details");
   assert(elements.get("operation-library").innerHTML.includes("运动黏度测定仪"), "viscometer group should be visible");
   assert(elements.get("operation-library").innerHTML.includes("颗粒计数仪"), "particle counter group should be visible");
   assert(elements.get("operation-library").innerHTML.includes("FTIR光谱采集接口"), "FTIR capability should be visible");
@@ -245,21 +291,17 @@ setTimeout(async () => {
   assert(!elements.get("operation-library").innerHTML.includes('class="op-group instrument" open'), "instrument category should be collapsed by default");
   assert(!elements.get("operation-library").innerHTML.includes('class="op-group robot" open'), "robot category should be collapsed by default");
   assert(!elements.get("operation-library").innerHTML.includes('class="op-group lab" open'), "laboratory category should be collapsed by default");
-  assert(!indexHtml.includes('class="spatial-location-panel" open'), "spatial information should be collapsed by default");
+  assert(!indexHtml.includes('class="spatial-location-panel"'), "the unused spatial panel should be removed");
+  assert(!indexHtml.includes('value="deterministic"'), "the duplicated offline option should be merged");
+  assert(indexHtml.includes('value="rules">本地规则编排（离线）'), "one local entry should cover keywords and templates");
+  assert(indexHtml.includes('value="deepseek" selected>AI智能编排'), "AI planning must be selected by default");
+  elements.get("planner-mode").value = "rules";
   assert(
     elements.get("operation-library").innerHTML.indexOf("机械臂物体点到点搬运") <
       elements.get("operation-library").innerHTML.indexOf("试管识别与位置标定"),
     "physical transfer should appear first in the robot category"
   );
-  assert(elements.get("spatial-location-list").innerHTML.includes("VD10检测工位"), "VD10 location should be visible");
-  assert(elements.get("spatial-location-list").innerHTML.includes("送检样品检录工作台"), "check-in location should be visible");
-  assert(elements.get("spatial-location-count").textContent === "5 项", "the interface should show all five spatial locations");
-  assert(elements.get("spatial-location-list").innerHTML.includes("3层建筑"), "building floor count should be visible");
-  assert(elements.get("spatial-location-list").innerHTML.includes("层高 3.6 m"), "temporary floor height should be visible");
-  assert(elements.get("spatial-location-list").innerHTML.includes("VD10支撑桌"), "VD10 support table should be visible");
-  assert(elements.get("spatial-location-list").innerHTML.includes("一楼电梯候梯与进梯点"), "floor-1 elevator stop should be visible");
-  assert(elements.get("spatial-location-list").innerHTML.includes("三楼电梯出梯点"), "floor-3 elevator stop should be visible");
-  assert(elements.get("spatial-location-list").innerHTML.includes("小车一楼至三楼电梯运输"), "elevator route should be visible");
+  assert(elements.get("spatial-location-list").innerHTML === "", "removed spatial panel should no longer be rendered");
   assert(!semantic.innerHTML.includes("样品定量分装"), "workflow must wait for MQTT preprocessing");
 
   window.dispatchEvent(new CustomEvent("autolab:document-intent", {
@@ -461,7 +503,9 @@ setTimeout(async () => {
   assert(!/C2|元操作|(?:vd10|robot)\.meta\./.test(userDiagram), "user flowchart should show operation names instead of internal terminology and IDs");
   assert(userDiagram.includes("VD10样品检测"), "flowchart should identify the instrument and operation");
   assert(userDiagram.includes("进入测试界面"), "operation nodes should explain what will happen");
-  assert(userDiagram.includes('M380 64 L380 128'), "task input should connect directly to the first operation when there are no separate user-goal checks");
+  assert(userDiagram.indexOf("流程检查通过吗？") < userDiagram.indexOf("1. 样品接收与信息登记"), "the overall yes/no check must precede operation steps");
+  assert(!userDiagram.includes("已匹配所需操作"), "matched requirements must not terminate in a detached success branch");
+  assert(userDiagram.includes("<tspan"), "node text should wrap instead of truncating");
   const initialScroll = diagramStub.scrollLeft;
   diagramStub.listeners.pointerdown({ pointerType: "mouse", button: 0, pointerId: 1, clientX: 100, preventDefault() {} });
   diagramStub.listeners.pointermove({ pointerId: 1, clientX: 60, preventDefault() {} });
@@ -485,9 +529,28 @@ setTimeout(async () => {
       ], mappings: [], validation: {}, decision: { status: "NEEDS_INPUT", logical_executable: false, message: "目标仪器未指定" }
     } }
   } }));
-  assert(elements.get("reasoning-trace").innerHTML.includes("操作支持，待安排"), "matched branch should remain visible when another goal fails");
+  assert(elements.get("reasoning-trace").innerHTML.includes("可选操作（待编排）"), "matched requirement should remain visible when another goal fails");
   assert(elements.get("reasoning-trace").innerHTML.includes("目标仪器未指定"), "missing-input branch should show the blocker");
   assert(elements.get("reasoning-trace").innerHTML.includes("尚未生成操作步骤"), "unmapped capabilities must not become an execution chain");
+  const longTask = "将来源容器中的样品分配给多个明确登记的检测仪器，并逐一确认各仪器的操作要求与样品信息完整。";
+  const longBlocker = "目标仪器未指定，请补充仪器名称、具体编号、检测项目与样品体积，系统将记录问题并继续核对其他任务要求。";
+  window.dispatchEvent(new CustomEvent("autolab:planner-result", { detail: {
+    status: "failed", plannerMetadata: { reasoningTrace: {
+      facts: [{ name: "user_intent", value: longTask }],
+      goals: [
+        { description: "VD10蒸馏", origin: "user_request", status: "covered", covered_by: ["vd10.meta.sample_test"] },
+        { description: longTask, origin: "user_request", status: "needs_input", reason: longBlocker }
+      ], mappings: [{ operation_id: "vd10.meta.sample_test", operation_name: "VD10样品检测" }],
+      decision: { status: "NEEDS_INPUT", logical_executable: false, message: longBlocker }
+    } }
+  } }));
+  const blockedDiagram = elements.get("reasoning-trace").innerHTML.split('<details class="cot-evidence">')[0];
+  const visibleText = [...blockedDiagram.matchAll(/<tspan[^>]*>(.*?)<\/tspan>/g)].map((match) => match[1]).join("");
+  assert(visibleText.includes(longTask) && visibleText.includes(longBlocker), "long task and blocker text must remain fully visible across wrapped lines");
+  assert(!blockedDiagram.includes("…"), "flowchart must not add ellipses to long node content");
+  assert(blockedDiagram.includes("记录问题，继续检查"), "failed requirement must route through issue recording before checking remaining requirements");
+  assert(blockedDiagram.includes(">是</text>") && blockedDiagram.includes(">否</text>"), "mixed requirements should show meaningful yes and no paths");
+  assert(!blockedDiagram.includes("1. VD10样品检测"), "blocked overall check must not lead into candidate execution steps");
   const clarificationText = "对已交接样品进行蒸馏检测";
   setIntent(clarificationText);
   dispatchSemantic(clarificationText, {
@@ -525,7 +588,7 @@ setTimeout(async () => {
       experimentName: "VD10检测", steps: [], parameters: {}, timestamp: Date.now(),
       operationChain: {
         contractVersion: "1.0.0", planId: "plan_external",
-        capabilityLibrary: { id: "autolab.vd10.meta_operations", version: "1.4.0", checksum: "sha256:test" },
+        capabilityLibrary: { id: "autolab.vd10.meta_operations", version: "1.7.1", checksum: "sha256:test" },
         operations: [
           {
             stepId: "external_001", sequence: 1, metaOperationId: "robot.meta.aliquot_sample",
@@ -554,6 +617,39 @@ setTimeout(async () => {
     }
   }));
   assert(elements.get("physical-flow").innerHTML.includes("VD10状态未确认"), "external physical blockers should be displayed on the matching step");
+
+  const localPayload = JSON.parse(fs.readFileSync(path.join(root, "examples/local-semantic-add.sample.json"), "utf8"));
+  elements.get("planner-mode").value = "deepseek";
+  elements.get("local-semantic-file").files = [{ size: 500, text: async () => "\uFEFF" + JSON.stringify(localPayload) }];
+  await elements.get("local-semantic-file").listeners.change();
+  assert(lastLocalSemanticRequest.parameters.operations[0].operationId === "op_001", "local import should preserve the colleague's operation ID");
+  assert(elements.get("intent-input").value === "从瓶子1（容器编号：bottle_1）中吸取10mL液体，加入瓶子2（容器编号：bottle_2）中。", "JSON import should replace ambiguous input with precise natural language");
+  assert(lastIntelligentRequest.text === elements.get("intent-input").value && lastIntelligentRequest.scenario_id === "liquid_transfer_demo", "AI should receive only the resolved task text in the liquid scenario");
+  assert(lastIntelligentRequest.model_mode === "deepseek" && Object.keys(lastIntelligentRequest.parameters).length === 0, "JSON adapter should defer capability selection and argument binding to AI planning");
+  assert(semantic.innerHTML.includes("容器间定量移液"), "local semantic JSON should produce the new robot operation");
+  assert(semantic.innerHTML.includes("瓶子1") && semantic.innerHTML.includes("瓶子2") && semantic.innerHTML.includes("10 mL"), "local operation card should show both containers and quantity");
+  assert(elements.get("intent-summary").innerHTML.includes("本地解析结果 JSON"), "local source should be visible in preprocessing");
+  assert(elements.get("physical-flow").innerHTML.includes("等待外部物理可执行确认"), "local plan must wait for physical confirmation");
+  lastLocalSemanticRequest = null;
+  elements.get("planner-mode").value = "deepseek";
+  await parseButton.listeners.click();
+  assert(lastLocalSemanticRequest === null && lastIntelligentRequest.scenario_id === "liquid_transfer_demo", "regenerating a resolved task should use AI directly without repeating JSON adaptation");
+  elements.get("planner-mode").value = "rules";
+  await window.autolabLocalSemantic.plan(localPayload);
+  assert(elements.get("planner-mode").value === "rules" && lastIntelligentRequest.model_mode === "deterministic", "JSON import must honor the merged offline mode rather than switching to AI");
+  assert(semantic.innerHTML.includes("容器间定量移液"), "merged offline mode must retain the liquid template");
+  elements.get("planner-mode").value = "deepseek";
+  const incompletePayload = JSON.parse(JSON.stringify(localPayload));
+  incompletePayload.originalText = "把这个加到这个里面";
+  lastIntelligentRequest = null;
+  await window.autolabLocalSemantic.plan(incompletePayload);
+  assert(lastIntelligentRequest === null, "incomplete resolution must not call AI");
+  assert(!semantic.innerHTML.includes("容器间定量移液"), "incomplete local result must clear the previous operation chain");
+  assert(elements.get("intent-summary").innerHTML.includes("请补充移液体积"), "incomplete local input should display a clarification");
+  elements.get("clarification-input").value = "移液体积为10ml";
+  await elements.get("clarification-submit").listeners.click();
+  assert(lastLocalSemanticRequest.parameters.operations[0].arguments.sourceObject.objectId === "bottle_1", "clarification should retain the local object binding");
+  assert(semantic.innerHTML.includes("容器间定量移液"), "local volume clarification should regenerate the operation chain");
 
   console.log("v0.3.0 MQTT preprocessing and planning smoke test passed");
 }, 50);

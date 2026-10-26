@@ -1,0 +1,18 @@
+{
+  "knowledge_id": "autolab.planner.liquid_transfer",
+  "version": "0.1.0",
+  "scenario_id": "liquid_transfer_demo",
+  "review_status": "draft",
+  "scope": "将明确来源容器中的指定体积液体加入明确目标容器，仅规划一次定量移液。",
+  "required_request_fields": ["source_object_id", "target_object_id", "volume_ml"],
+  "boundaries": ["只规划一个明确的容器间定量移液任务。", "从明确自然语言绑定容器编号与体积，不推测指代。", "不添加检测、加热、运输等其他操作。", "物理可执行确认由后续独立模块负责。"],
+  "operations": [{
+    "operation_id": "robot.meta.transfer_liquid",
+    "condition": "always",
+    "parameter_bindings": {
+      "source_object_id": "source_object_id", "target_object_id": "target_object_id",
+      "source_object_name": "source_object_name", "target_object_name": "target_object_name", "volume_ml": "volume_ml"
+    }
+  }],
+  "rules": []
+}

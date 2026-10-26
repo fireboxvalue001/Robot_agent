@@ -155,6 +155,13 @@
       },
       "allOf": [
         {
+          "if": {
+            "required": ["extensions"],
+            "properties": { "extensions": { "required": ["operation_granularity"], "properties": { "operation_granularity": { "const": "single_action" } } } }
+          },
+          "then": { "properties": { "operation_tree": { "properties": { "type": { "const": "sequence" }, "children": { "maxItems": 1 } } } } }
+        },
+        {
           "if": { "properties": { "category": { "const": "instrument" } }, "required": ["category"] },
           "then": { "required": ["instrument_id"] }
         }

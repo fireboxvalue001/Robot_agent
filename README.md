@@ -100,9 +100,15 @@ MQTT_HISTORY_DIR=
 
 “查看通信历史”会把语义回包整理成可选择的记录。点击“载入并生成流程”后，界面恢复历史 `originalText` 和 `parameters`，再使用当前版本的元操作能力库重新检查并编排；不会重放历史执行步骤。仍需澄清的成功记录可以载入查看，但补充完整并重新进行语义处理前不会生成流程。
 
+## 本地解析结果编排
+
+C1 的“导入解析结果 JSON”读取同事输出的单个 `add_to` 结果，先将指代替换成包含容器编号和体积的明确自然语言，填入输入框，再自动调用 AI 智能编排。适配层可独立调用 `resolve_local_semantic(payload)` 或 `POST /api/v1/intent/from-semantic`，仅输出明确文字，不选择能力或返回操作链。无需 MQTT 公共字段。
+
+目前支持从瓶子1取出10mL液体加入瓶子2。来源和目标来自解析结果，体积优先取结构化 `arguments.volume`，未提供时只从原文唯一明确的 mL 体积补取。缺失、歧义和冲突会返回澄清提示。示例为 `examples/local-semantic-add.sample.json`，交接与调用方式见 `docs/LOCAL_SEMANTIC_ADAPTER.md`。
+
 ## AI智能编排与可验证推理链
 
-界面提供“关键词编排”“AI智能编排”和“AI智能编排（离线状态）”。AI模式使用受限场景知识生成候选计划，后端再依据C2元操作能力库校验元操作ID、参数来源、依赖闭合、目标覆盖、操作顺序和证据引用。
+界面提供“本地规则编排（离线）”和“AI智能编排”两个入口。本地入口合并关键词匹配与确定性场景模板，不调用云端AI；AI模式使用受限场景知识生成候选计划，后端再依据能力库校验元操作ID、参数来源、依赖闭合、目标覆盖、操作顺序和证据引用。导入解析JSON也尊重当前模式，不会自动切换AI。
 
 中间区域的“AI可验证推理链”展示输入事实、目标、C2映射和校验结论。只有六项程序校验全部通过时才标记为逻辑可执行，状态为 `PHYSICAL_PENDING`；收到独立物理可执行确认后才能进入 `EXECUTABLE`。接口与JSON格式见 `docs/INTELLIGENT_PLANNER.md` 和 `schemas/reasoning-trace.schema.json`。
 
@@ -121,9 +127,15 @@ MQTT_HISTORY_DIR=
 
 ## 数据与边界
 
-`data/vd10_agent_only_operation_tree.json` 提供 VD10 小操作节点，`data/meta-operations.json` 是界面、任务编排器和交接程序共同使用的唯一元操作能力库。能力库现包含 41 项能力，覆盖 VD10、样品处理与运输，以及运动黏度仪、颗粒计数仪和 FTIR 的待验证接口。新增仪器操作仅为 `interface_only`，不代表智能规划场景或硬件已接入。格式约束见 `schemas/meta-operation-library.schema.json`，交接说明见 `docs/META_OPERATION_SPEC.md`、`docs/META_OPERATION_CATALOG.md` 和 `docs/META_OPERATION_HANDOFF.md`。
+流程图、待补表单和条件流程编排已改为配置驱动。场景目录为 `knowledge/planner_scenarios/registry.json`；新增“样品定时静置”用于验证数字、文字、选项和是/否参数跨场景复用。选择“AI智能编排”，可在智能规划选项中选择场景，或自动识别已登记场景；多个匹配不自动拼接。新增配置方式及仍需代码实现的边界见 `docs/CONFIGURED_WORKFLOWS.md`。原有VD10、定量移液适配器及MQTT协议保留。
+
+`data/vd10_agent_only_operation_tree.json` 提供 VD10 小操作节点，`data/meta-operations.json` 是界面、任务编排器和交接程序共同使用的唯一能力库。版本1.7.1包含93个兼容条目（仪器25、机器人63、环境5），其中55个为单节点条目、38个为历史组合。12组机器人组合示例另存 `data/robot-action-templates.json`，不作为元操作。拆解、复用与控制要求见 `docs/ROBOT_ACTION_CAPABILITIES.md`。登记能力不代表硬件已接入。格式约束见 `schemas/meta-operation-library.schema.json`，交接说明见 `docs/META_OPERATION_SPEC.md`、`docs/META_OPERATION_CATALOG.md` 和 `docs/META_OPERATION_HANDOFF.md`。
+
+皮革油脂抽提已增加独立条件流程：选择“AI智能编排”，输入皮革二氯甲烷索氏抽提需求，界面显示阶段流程图、恒重循环及缺失参数。新增29个单步接口、参数来源核验、跨步骤数据引用和计算校验；设备仍待绑定，不执行硬件。使用方式与独立接口见 `docs/LEATHER_EXTRACTION.md`，场景定义在 `knowledge/planner_scenarios/leather_extraction.json`，资源配置在 `data/leather-extraction-resources.json`。原有MQTT协议不变。
 
 `data/spatial-locations.json` 保存多楼层空间位置注册表，格式约束见 `schemas/spatial-location-library.schema.json`。坐标原点位于一楼墙角，统一使用米。用户提供的一楼送检工作台左下角坐标 `(1.025, 2.93, 0)`，长宽高为 `1.75 / 0.75 / 0.763 m`；VD10 位于三楼并由 `0.76 / 0.63 / 0.70 m` 的小桌支撑。
+
+C2已移除空间位置展示及对应渲染代码。配置、只读接口和物理校验中的位置引用仍保留，不删除历史数据或改变上游契约。
 
 楼层高度暂按 `3.6 m`，VD10、小桌和电梯停靠点坐标均为可替换的临时值。空间库还登记了一楼至三楼的电梯运输链路，规划时通过稳定的位置 ID 和运输链路 ID 引用。上述临时数据只用于可视化和任务编排，现场标定完成并将状态改为 `verified` 前，物理执行仍会被阻止。
 

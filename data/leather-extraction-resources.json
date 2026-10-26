@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0.0",
+  "notice": "仅声明待绑定资源，不生成虚构坐标或已批准方法。",
+  "solvent_removal_methods": [
+    {
+      "id": "dcm_distillation_recovery_v1",
+      "version": "0.1.0",
+      "name": "二氯甲烷蒸馏冷凝回收",
+      "solvent": "dichloromethane",
+      "review_status": "draft",
+      "description_status": "provided",
+      "source": "用户2026-10-26补充的四步实际流程；非标准原文或设备说明书",
+      "extraction_completion": {"minimum_completed_reflux_cycles": 30, "count_source": "verified_observation_or_counter", "time_is_not_cycle_count": true},
+      "steps": [
+        "按规定完成至少30次溶剂回流循环后停止加热，适当冷却后拆卸。",
+        "取下索氏抽提器与装有皮革样品的滤纸筒，保留装有萃取液的抽提瓶，连接蒸馏回收装置。",
+        "在通风橱内受控加热，使二氯甲烷蒸发并经冷凝系统回收。",
+        "以不再持续产生馏出液且无明显大量游离溶剂作为蒸馏阶段的操作性结束参考，再按标准要求烘干、冷却和称量。"
+      ],
+      "distillation_endpoint": {
+        "all_of": ["no_continuous_distillate", "no_obvious_bulk_free_solvent"],
+        "role": "operational_reference_only",
+        "does_not_prove": ["zero_residual_solvent", "safe_for_any_oven", "constant_mass"],
+        "confirmation": "由已验证观察接口或人员确认，不能仅凭计时推断"
+      },
+      "pending_confirmation": ["蒸馏回收设备型号与控制配置", "受控加热的具体条件", "冷凝回收与通风反馈要求", "操作性结束参考的观察和确认方式", "适用标准名称版本、是否同时要求最短抽提时间及后续烘干条件"],
+      "execution_allowed": false
+    }
+  ],
+  "resources": [
+    {
+      "id": "balance",
+      "name": "分析天平",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "drying_oven",
+      "name": "烘箱",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "water_bath",
+      "name": "水浴设备",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "condenser",
+      "name": "冷凝水装置",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "solvent_remover",
+      "name": "溶剂去除设备（待确定方法）",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "desiccator",
+      "name": "干燥器",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "soxhlet",
+      "name": "索氏抽提工位",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "ventilation",
+      "name": "通风设施",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "scenario_id": "sample_hold_config", "name": "样品定时静置", "knowledge_id": "autolab.planner.sample_hold",
+  "version": "0.1.0", "review_status": "draft", "scope": "将已明确的样品放到指定位置并定时静置，只生成逻辑计划。",
+  "source": "配置化扩展示例；使用现有抓取、搬运和释放能力，不新增设备能力或测量结果。",
+  "entry": "start",
+  "phases": [{"id": "placement", "label": "1. 样品放置"}, {"id": "holding", "label": "2. 定时静置"}, {"id": "exception", "label": "异常复核", "exception": true}],
+  "parameters": {
+    "sample_name": {"type": "string", "label": "样品标识", "anchors": ["样品标识"], "maxLength": 100},
+    "target_location": {"type": "string", "label": "静置位置", "anchors": ["静置位置"], "maxLength": 100},
+    "hold_seconds": {"type": "number", "label": "静置时长", "unit": "秒", "anchors": ["静置"], "minimum": 1, "maximum": 86400, "integer": true},
+    "storage_mode": {"type": "string", "label": "存放方式", "anchors": ["存放方式"], "enum": ["常规", "遮光"]},
+    "label_confirmed": {"type": "boolean", "label": "样品标识已核对", "anchors": ["样品标识已核对"], "enum": [true]}
+  },
+  "nodes": [
+    {"id": "start", "kind": "start", "label": "接收静置任务", "phase_id": "placement", "requires": [], "next": "pick"},
+    {"id": "pick", "kind": "action", "label": "抓取指定样品", "phase_id": "placement", "operation_id": "robot.meta.envelop_grasp", "requires": ["sample_name", "label_confirmed"], "input_bindings": {"object_id": {"parameter_ref": "sample_name"}, "control_profile_id": {"resource_ref": "gripper.control_profile_id"}}, "next": "move", "on_error": "review"},
+    {"id": "move", "kind": "action", "label": "移动至指定静置位置", "phase_id": "placement", "operation_id": "robot.meta.move_grasped_object", "requires": ["sample_name", "target_location"], "input_bindings": {"object_id": {"parameter_ref": "sample_name"}, "target_location_id": {"parameter_ref": "target_location"}, "control_profile_id": {"resource_ref": "arm.control_profile_id"}}, "next": "release", "on_error": "review"},
+    {"id": "release", "kind": "action", "label": "轻放并释放样品", "phase_id": "placement", "operation_id": "robot.meta.release_object", "requires": ["target_location"], "input_bindings": {"object_id": {"parameter_ref": "sample_name"}, "target_location_id": {"parameter_ref": "target_location"}, "control_profile_id": {"resource_ref": "gripper.control_profile_id"}, "purpose": {"value": "place"}}, "next": "hold", "on_error": "review"},
+    {"id": "hold", "kind": "wait", "label": "按要求定时静置", "phase_id": "holding", "requires": ["hold_seconds", "storage_mode"], "duration_ref": "hold_seconds", "guard": "registered_location_and_storage_conditions_unchanged", "display": {"notice": "先验证位置与存放条件，条件变化时停止并请求复核。"}, "next": "complete", "on_error": "review", "on_timeout": "review"},
+    {"id": "complete", "kind": "end", "label": "静置逻辑流程结束", "phase_id": "holding", "requires": []},
+    {"id": "review", "kind": "end", "label": "停止并请求人工复核", "phase_id": "exception", "requires": []}
+  ],
+  "limits": {"on_error": "stop_and_request_review", "on_timeout": "stop_and_request_review"}
+}

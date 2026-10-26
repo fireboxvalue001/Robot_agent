@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import uuid
 from graphlib import TopologicalSorter
@@ -38,6 +39,10 @@ def _eligible_entries(store: KnowledgeStore, request: PlannerRequest) -> list[di
 
 
 def _user_goals(store: KnowledgeStore, request: PlannerRequest) -> list[dict]:
+    if store.scenario["scenario_id"] == "liquid_transfer_demo":
+        return [{"goal_id": "U01", "description": request.text, "origin": "user_request", "status": "pending",
+                 "covered_by": [], "candidate_operations": ["robot.meta.transfer_liquid"],
+                 "reason": "等待智能编排与参数校验。"}]
     capability = json.loads((store.project_dir / "knowledge" / "document_intent" / "vd10_capability.json").read_text(encoding="utf-8"))
     intent = request.task_intent
     tests = list(intent.requested_tests) if intent else []
@@ -149,6 +154,11 @@ def _initial_reasoning_trace(store: KnowledgeStore, request: PlannerRequest) -> 
             "source": {"type": "request_parameter", "path": "request.task_intent.source"},
         },
     ]
+    if store.scenario["scenario_id"] == "liquid_transfer_demo":
+        facts = facts[:1] + [{
+            "fact_id": f"F{index:02d}", "name": name, "value": value,
+            "source": {"type": "user_text", "path": "request.text"}
+        } for index, (name, value) in enumerate(request.parameters.model_dump(exclude_none=True).items(), 2)]
     goals = _user_goals(store, request)
     goals.extend([
         {
@@ -393,11 +403,12 @@ def _verify_grounded_plan(
                 goal["reason"] = "候选操作已通过C2元操作、参数、依赖和证据校验。"
     for goal in trace["goals"]:
         if goal["origin"] == "user_request" and goal["status"] == "pending":
-            if "vd10.meta.sample_test" in operation_ids and internal_valid:
+            matched_operations = [operation_id for operation_id in goal["candidate_operations"] if operation_id in operation_ids]
+            if matched_operations and internal_valid:
                 goal["status"] = "covered"
-                goal["covered_by"] = ["vd10.meta.sample_test"]
-                goal["reason"] = "检测项目属于已登记VD10能力范围，且候选检测操作通过校验。"
-            elif "vd10.meta.sample_test" in operation_ids:
+                goal["covered_by"] = matched_operations
+                goal["reason"] = "任务已匹配对应操作，且参数、顺序和证据检查通过。"
+            elif matched_operations:
                 goal["status"] = "capability_matched"
                 goal["reason"] = "检测能力匹配，但操作链仍缺少必要参数或校验未完成。"
             else:
@@ -433,7 +444,38 @@ class PlannerService:
         }
 
     def plan(self, request: PlannerRequest) -> PlannerResult:
+        from .scenarios import get_entry, resolve
+        if request.scenario_id == "auto":
+            selection = resolve(request.text, root=self.knowledge.project_dir)
+            if selection["status"] != "resolved":
+                raise ValueError(selection["message"])
+            request = request.model_copy(update={"scenario_id": selection["scenario_id"]})
+        try:
+            entry = get_entry(request.scenario_id, self.knowledge.project_dir)
+        except KeyError:
+            entry = None
+        if entry and not entry.get("enabled", True):
+            raise ValueError("场景已停用")
+        if entry and entry["engine"] == "conditional":
+            from .conditional import plan_conditional
+            return PlannerResult.model_validate(plan_conditional(request, self.models[request.model_mode], self.knowledge.project_dir))
         store = self.knowledge
+        liquid_scene = request.scenario_id == "liquid_transfer_demo"
+        liquid_values = None
+        original_parameters = request.parameters.model_dump(exclude_none=True)
+        if liquid_scene:
+            store = KnowledgeStore(self.knowledge.project_dir, scenario_id=request.scenario_id)
+            match = re.fullmatch(
+                r"从(?P<source_object_name>[^（）\r\n]{1,100})（容器编号：(?P<source_object_id>[A-Za-z0-9_.:-]{1,100})）中吸取"
+                r"(?P<volume_ml>\d+(?:\.\d+)?)(?:mL|毫升)液体，加入"
+                r"(?P<target_object_name>[^（）\r\n]{1,100})（容器编号：(?P<target_object_id>[A-Za-z0-9_.:-]{1,100})）中[。.]?",
+                request.text.strip(), re.I,
+            )
+            if match:
+                liquid_values = match.groupdict()
+                liquid_values["volume_ml"] = float(liquid_values["volume_ml"])
+                if math.isfinite(liquid_values["volume_ml"]) and liquid_values["volume_ml"] > 0:
+                    request = request.model_copy(update={"parameters": request.parameters.model_copy(update=liquid_values)})
         reasoning_trace = _initial_reasoning_trace(store, request)
         if re.search(r"分成|分为|分装|等分|(?:送到|送至|送入|搬运到)\s*[一二两三四五六七八九十\d]+\s*(?:个|台)?\s*仪器", request.text):
             _append_request_goals(reasoning_trace, store, request.text, [])
@@ -463,6 +505,14 @@ class PlannerService:
 
         if request.scenario_id != store.scenario["scenario_id"]:
             return finish("unsupported", "NO_SCOPED_KNOWLEDGE", "当前没有该场景的规划知识，系统不会猜测执行。")
+        if liquid_scene:
+            if liquid_values is None or not math.isfinite(liquid_values["volume_ml"]) or liquid_values["volume_ml"] <= 0:
+                reasoning_trace["goals"][0].update(status="needs_input", reason="来源、目标容器编号和移液体积需要明确。")
+                return finish("needs_input", "UNRESOLVED_LIQUID_TEXT", "请提供明确的来源、目标容器编号和正数体积，采用本地指代解析后的完整文字。")
+            if liquid_values["source_object_id"] == liquid_values["target_object_id"]:
+                return finish("conflict", "SAME_CONTAINER", "来源与目标不能是同一个容器。")
+            if any(name in liquid_values and value != liquid_values[name] for name, value in original_parameters.items()):
+                return finish("conflict", "TEXT_PARAMETER_CONFLICT", "自然语言与另行传入的参数不一致，请核对。")
         documents = store.retrieve(request)
         if not documents:
             return finish("needs_review", "NO_APPROVED_KNOWLEDGE", "当前场景知识尚未审核；正式模式不会使用草稿知识。")
@@ -477,7 +527,7 @@ class PlannerService:
         ]
         if missing:
             return finish("needs_input", "MISSING_INPUT", "需要上游补充规划输入。", fields=missing)
-        if parameters["handoff_confirmed"] is not True:
+        if not liquid_scene and parameters["handoff_confirmed"] is not True:
             return finish("conflict", "HANDOFF_NOT_CONFIRMED", "样品交接尚未确认，模型不能代替外部确认。")
 
         blocked_goals = [goal for goal in reasoning_trace["goals"] if goal["origin"] == "user_request" and goal["status"] in {"unsupported", "needs_input", "scenario_blocked"}]
@@ -509,7 +559,7 @@ class PlannerService:
                 **metadata,
                 "raw_output": raw,
                 "retrieval": documents,
-                "prompt_version": "vd10-planner.v1",
+                "prompt_version": f"{store.scenario['scenario_id']}.v1",
             }
             if metadata.get("finish_reason") == "length":
                 return finish("model_error", "MODEL_TRUNCATED", "模型输出被截断，本次结果未采用。")
@@ -522,7 +572,9 @@ class PlannerService:
         unresolved_items = list(candidate.unresolved_requests)
         precise_unresolved = _append_request_goals(
             reasoning_trace, store, request.text, unresolved_items,
-        ) if unresolved_items else []
+        ) if unresolved_items and not liquid_scene else unresolved_items
+        if liquid_scene and unresolved_items:
+            reasoning_trace["goals"][0].update(status="uncovered", reason="；".join(unresolved_items))
         operation_ids = [step.operation_id for step in candidate.steps]
         eligible = {
             entry["operation_id"] for entry in store.scenario["operations"]
@@ -556,7 +608,7 @@ class PlannerService:
         result["generation"]["order_repaired"] = order != operation_ids
         step_ids = {operation_id: f"s{index + 1:02d}" for index, operation_id in enumerate(order)}
         scenario_entries = {item["operation_id"]: item for item in store.scenario["operations"]}
-        used_evidence = {"scenario:vd10_single_sample"}
+        used_evidence = {store.scenario_evidence_id}
 
         for operation_id in order:
             operation = store.operations[operation_id]
@@ -569,7 +621,7 @@ class PlannerService:
             }
             values.update(entry.get("constant_bindings", {}))
             errors = list(Draft202012Validator(operation["inputs"]).iter_errors(values))
-            deferrable_sample_id = parameters.get("sample_id") is None and all(
+            deferrable_sample_id = not liquid_scene and parameters.get("sample_id") is None and all(
                 error.validator == "required"
                 and set(error.validator_value) - set(values) == {"sample_id"}
                 for error in errors
@@ -586,7 +638,7 @@ class PlannerService:
             ]
             used_evidence.update(evidence_ids)
             parameter_sources = {
-                input_name: f"request.parameters.{request_name}"
+                input_name: "request.text" if liquid_scene else f"request.parameters.{request_name}"
                 for input_name, request_name in bindings.items()
                 if input_name in values
             }
@@ -611,7 +663,7 @@ class PlannerService:
 
         result["evidence"] = [store.evidence[key] for key in sorted(used_evidence)]
         validation = _verify_grounded_plan(store, request, result["steps"], reasoning_trace)
-        if parameters.get("sample_id") is None:
+        if not liquid_scene and parameters.get("sample_id") is None:
             return finish(
                 "needs_input", "DEFERRED_SAMPLE_ID",
                 "候选元操作链已生成；样品编号待补充，当前不能确认参数完整或进入执行。",

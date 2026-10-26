@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "scenarios": [
+    {
+      "id": "vd10_single_sample_demo", "name": "VD10单样品检测", "engine": "legacy_linear",
+      "file": "knowledge/planner_scenarios/vd10_single_sample.json", "enabled": true,
+      "routing_patterns": ["VD10"], "ui": {"handoff_required": true, "parameter_mode": "sample"}
+    },
+    {
+      "id": "liquid_transfer_demo", "name": "容器间定量移液", "engine": "legacy_linear",
+      "file": "knowledge/planner_scenarios/liquid_transfer.json", "enabled": true,
+      "routing_patterns": ["^从.+（容器编号：.+）中吸取.+液体，加入.+（容器编号：.+）中[。.]?$"],
+      "ui": {"handoff_required": false, "parameter_mode": "resolved_text", "read_results": false}
+    },
+    {
+      "id": "leather_fat_extraction", "name": "皮革油脂抽提", "engine": "conditional",
+      "file": "knowledge/planner_scenarios/leather_extraction.json", "enabled": true,
+      "routing_patterns": ["皮革", "索氏", "油脂(?:提取|抽提)", "二氯甲烷"],
+      "ui": {"handoff_required": false, "parameter_mode": "process"}
+    },
+    {
+      "id": "sample_hold_config", "name": "样品定时静置", "engine": "conditional",
+      "file": "knowledge/planner_scenarios/sample_hold.json", "enabled": true,
+      "routing_patterns": ["样品定时静置", "静置登记示例"],
+      "ui": {"handoff_required": false, "parameter_mode": "process"}
+    }
+  ]
+}

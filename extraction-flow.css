@@ -1,0 +1,44 @@
+.extraction-workflow { width:100%; min-width:0; color:#dce6f4; }
+.extraction-workflow > p { font-size:13px; line-height:1.7; color:#b8c5d9; }
+.extraction-overview { width:100%; max-height:720px; overflow:auto; padding:12px; box-sizing:border-box; background:#101827; border:1px solid #35435b; border-radius:10px; }
+.extraction-phase { border:1px solid #6651a3; border-radius:9px; background:#211d36; margin:0 auto; width:100%; box-sizing:border-box; }
+.extraction-phase > summary { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; padding:15px; cursor:pointer; }
+.extraction-phase > summary b { font-size:14px; }
+.extraction-phase > summary span { font-size:12px; color:#c9bddf; }
+.extraction-phase[open] > summary { border-bottom:1px solid #51426f; }
+.extraction-phase-arrow { text-align:center; padding:5px; color:#a99ad6; }
+.extraction-node-list { padding:12px; display:grid; gap:14px; }
+.extraction-node { padding:12px; border:1px solid #3abf89; border-left-width:4px; border-radius:7px; background:#102a29; min-width:0; overflow-wrap:anywhere; }
+.extraction-node.missing { border-color:#efc64e; background:#332d1c; }
+.extraction-node.condition { border-style:dashed; }
+.extraction-node-title { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; }
+.extraction-node-title > span { font-size:11px; color:#bccce0; }
+.extraction-node p,.extraction-node small { font-size:12px; line-height:1.7; color:#bccce0; margin:7px 0 0; display:block; }
+.extraction-node details { margin-top:8px; font-size:12px; }
+.extraction-branches { display:flex; flex-direction:column; gap:5px; margin-top:10px; font-size:12px; color:#edce83; }
+.extraction-workflow pre { overflow:auto; max-height:400px; font-size:11px; }
+.extraction-chart { width:100%; max-height:680px; overflow:auto; background:#101827; border:1px solid #35435b; border-radius:10px; margin-bottom:14px; }
+.extraction-chart svg { width:100%; min-width:620px; display:block; }
+.extraction-chart text { fill:#c4cfe2; text-anchor:middle; font-size:12px; font-family:system-ui,sans-serif; stroke:none; }
+.extraction-chart .extraction-svg-title { font-size:15px; fill:#f0edf8; font-weight:700; }
+.clarification-checklist { margin-top:16px; padding-top:16px; border-top:1px solid #41516a; }
+.clarification-checklist[hidden] { display:none; }
+.clarification-checklist-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; color:#edf2fc; }
+.clarification-checklist-heading > span { font-size:13px; color:#efce7a; }
+.clarification-checklist-heading { cursor:pointer; padding:8px 0; }
+.clarification-checklist-heading strong::before { content:"+ "; color:#efce7a; }
+.clarification-checklist-details[open] > summary strong::before { content:"- "; }
+.clarification-checklist-body > p { color:#aebdd1; font-size:13px; line-height:1.6; }
+.clarification-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:12px; }
+.clarification-field { display:flex; flex-direction:column; gap:7px; padding:12px; background:#121c2a; border:1px solid #465368; border-radius:7px; min-width:0; }
+.clarification-field > b { color:#f1e3b6; font-size:14px; }
+.clarification-field > small { color:#afbed0; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.clarification-number { display:flex; align-items:center; gap:10px; }
+.clarification-number input,.clarification-number select { width:100%; min-width:0; box-sizing:border-box; border:1px solid #65738b; border-radius:5px; padding:9px; background:#0a101a; color:#f1f5fc; font:inherit; }
+.clarification-number > span { color:#d0def2; min-width:30px; font-size:13px; }
+.clarification-blocker { padding:12px; border-left:3px solid #efbc64; background:#29251c; margin-bottom:14px; color:#efdcaf; }
+.clarification-blocker p,.clarification-blocker small { font-size:13px; line-height:1.6; }
+.clarification-blocker li { font-size:13px; line-height:1.8; }
+.clarification-checklist-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:14px; }
+.clarification-checklist-actions small { color:#aebdd1; }
+.clarification-complete { color:#68d7a1; }

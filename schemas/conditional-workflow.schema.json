@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local conditional experiment workflow v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "kind", "scenario_id", "entry", "nodes", "parameters", "resources", "limits", "execution_allowed"],
+  "properties": {
+    "contract_version": {"const": "1.0.0"},
+    "kind": {"const": "conditional_experiment_workflow"},
+    "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+    "name": {"type": "string"},
+    "phases": {"type": "array", "items": {"type": "object", "required": ["id", "label"]}},
+    "methods": {"type": "object"},
+    "entry": {"type": "string"},
+    "parameters": {"type": "object"},
+    "method": {"type": ["object", "null"]},
+    "clarifications": {"type": "array", "items": {"type": "object", "required": ["kind", "field", "label", "related_steps", "instruction"], "properties": {"kind": {"enum": ["parameter", "method", "issue"]}}}},
+    "resources": {"type": "array", "items": {"type": "object"}},
+    "limits": {"type": "object"},
+    "execution_allowed": {"const": false},
+    "nodes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "kind", "requires", "status", "reason", "arguments"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+          "label": {"type": "string", "minLength": 1},
+          "phase_id": {"type": "string"},
+          "kind": {"enum": ["start", "action", "wait", "guard", "decision", "loop_check", "monitored_hold", "compute", "end"]},
+          "operation_id": {"type": "string"},
+          "status": {"enum": ["covered", "needs_input", "unsupported"]},
+          "reason": {"type": "string"},
+          "arguments": {"type": "object"},
+          "requires": {"type": "array", "items": {"type": "string"}},
+          "next": {"type": "string"}, "on_pass": {"type": "string"}, "on_fail": {"type": "string"},
+          "data_refs": {"type": "array", "items": {"type": "string"}}
+        },
+        "allOf": [
+          {"if": {"properties": {"kind": {"const": "loop_check"}}}, "then": {"required": ["on_pass", "on_fail", "on_limit", "max_iterations_ref", "counter_id", "previous_state_ref", "repeat_state_updates", "threshold_ref", "comparison"]}},
+          {"if": {"properties": {"kind": {"const": "monitored_hold"}}}, "then": {"required": ["operation_id", "duration_ref", "interval_ref", "on_error", "on_timeout", "guard"]}},
+          {"if": {"properties": {"kind": {"const": "compute"}}}, "then": {"required": ["formula", "data_refs"], "properties": {"formula": {"enum": ["moisture_fraction", "extractable_content_dry_basis"]}}}}
+        ]
+      }
+    }
+  }
+}

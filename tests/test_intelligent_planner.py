@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 from backend.planner.model import deepseek_model
 from backend.planner.service import PlannerService
 from backend.planner.types import PlannerRequest, SampleParameters, TaskIntent
+from backend.local_semantic_adapter import resolve_local_semantic
 
 
 class PartialCoverageModel:
@@ -48,6 +49,57 @@ def request(**overrides):
 class IntelligentPlannerTests(unittest.TestCase):
     def setUp(self):
         self.service = PlannerService()
+
+    def test_resolved_text_uses_ai_to_select_and_validate_liquid_operation(self):
+        root = Path(__file__).resolve().parent.parent
+        payload = json.loads((root / "examples/local-semantic-add.sample.json").read_text(encoding="utf-8"))
+        resolved = resolve_local_semantic(payload)
+        candidate = json.dumps({"steps": [{"operation_id": "robot.meta.transfer_liquid", "evidence_ids": ["cap:robot.meta.transfer_liquid"]}], "unresolved_requests": []})
+        with patch.object(deepseek_model, "generate", return_value=(candidate, {"runtime": "deepseek_api", "network_inference": True, "used": True})) as model:
+            result = self.service.plan(PlannerRequest(
+                text=resolved["resolvedText"], scenario_id="liquid_transfer_demo", knowledge_mode="demo", model_mode="deepseek", read_results=False,
+            ))
+        model.assert_called_once()
+        self.assertEqual(result.status, "logical_pass")
+        self.assertEqual(len(result.steps), 1)
+        self.assertEqual(result.steps[0].parameters["source_object_id"], "bottle_1")
+        self.assertEqual(result.steps[0].parameters["target_object_id"], "bottle_2")
+        self.assertEqual(result.steps[0].parameters["volume_ml"], 10)
+        self.assertTrue(all(source == "request.text" for source in result.steps[0].parameter_sources.values()))
+        self.assertTrue(result.reasoning_trace["decision"]["logical_executable"])
+        self.assertFalse(result.execution_allowed)
+        context = json.loads(model.call_args.args[0][-1]["content"])
+        self.assertEqual([entry["operation_id"] for entry in context["retrieved_operations"]], ["robot.meta.transfer_liquid"])
+        self.assertNotIn("sourceSemantic", context)
+
+    def test_unresolved_liquid_text_does_not_call_model(self):
+        for text in ["把这个的10ml加入这个里面", "从瓶子1（容器编号：bottle_1）中吸取0mL液体，加入瓶子2（容器编号：bottle_2）中。"]:
+            with self.subTest(text=text), patch.object(deepseek_model, "generate") as model:
+                result = self.service.plan(PlannerRequest(text=text, scenario_id="liquid_transfer_demo", knowledge_mode="demo"))
+                self.assertEqual(result.status, "needs_input")
+                self.assertFalse(result.steps)
+                model.assert_not_called()
+
+    def test_liquid_text_conflict_and_same_container_are_blocked(self):
+        text = "从瓶子1（容器编号：bottle_1）中吸取10mL液体，加入瓶子2（容器编号：bottle_2）中。"
+        for request_value in [
+            PlannerRequest(text=text, scenario_id="liquid_transfer_demo", knowledge_mode="demo", parameters=SampleParameters(volume_ml=25.0)),
+            PlannerRequest(text=text.replace("bottle_2", "bottle_1"), scenario_id="liquid_transfer_demo", knowledge_mode="demo"),
+        ]:
+            with patch.object(deepseek_model, "generate") as model:
+                result = self.service.plan(request_value)
+                self.assertEqual(result.status, "conflict")
+                model.assert_not_called()
+
+    def test_liquid_ai_cannot_substitute_unrelated_operation(self):
+        candidate = json.dumps({"steps": [{"operation_id": "robot.meta.aliquot_sample", "evidence_ids": ["cap:robot.meta.aliquot_sample"]}], "unresolved_requests": []})
+        with patch.object(deepseek_model, "generate", return_value=(candidate, {"used": True})):
+            result = self.service.plan(PlannerRequest(
+                text="从瓶子1（容器编号：bottle_1）中吸取10mL液体，加入瓶子2（容器编号：bottle_2）中。",
+                scenario_id="liquid_transfer_demo", knowledge_mode="demo",
+            ))
+        self.assertEqual(result.status, "conflict")
+        self.assertFalse(result.steps)
 
     def test_current_capability_ids_form_ordered_plan(self):
         result = self.service.plan(request())

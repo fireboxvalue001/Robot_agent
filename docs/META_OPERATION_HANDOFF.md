@@ -6,7 +6,7 @@
 
 ## 必交文件
 
-1. `data/meta-operations.json`：唯一能力库源文件，当前为 `1.4.0`，包含41项元操作。
+1. `data/meta-operations.json`：唯一能力库源文件，当前为 `1.7.1`，包含93个兼容条目：55个单节点条目、38个历史组合条目。油脂提取新增29个单步接口，回流监测接口1.1.0增加完整循环次数反馈，见 `docs/LEATHER_EXTRACTION.md`。
 2. `schemas/meta-operation-library.schema.json`：能力库格式校验规则。
 3. `data/spatial-locations.json`：位置、楼层和电梯运输链路。
 4. `schemas/spatial-location-library.schema.json`：空间数据格式校验规则。
@@ -42,5 +42,7 @@
 - 未登记检测项目统一通过 `instrument.meta.run_registered_project_test` 阻断，不能猜测设备、方法或结果。
 
 ## 版本更新
+
+动作清单去重后补充了22个单步机器人动作，并将 `robot.meta.transfer_object` 升级为1.1.0以补充控制要求；该旧条目仍为历史组合。12组组合示例单独存放在 `data/robot-action-templates.json`，可通过 `GET /api/v1/capabilities/action-templates` 查询，不作为单步元操作。逐项拆解和控制配置约定见 `docs/ROBOT_ACTION_CAPABILITIES.md`。调用方应重新查询能力库版本与摘要；新增动作仍待控制接口和标定数据接入。
 
 新增或修改元操作时同步更新元操作自身 `version`、能力库 `updated_at`、能力清单、测试和 `PACKAGE_INFO.json`。下游应记录实际使用的元操作ID与版本，避免能力库升级后无法追溯历史任务。
