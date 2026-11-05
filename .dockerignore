@@ -1,0 +1,25 @@
+# Build context is deliberately allowlisted. Never send local secrets or history.
+**
+!backend/
+!backend/**
+!data/
+!data/*.json
+!knowledge/
+!knowledge/**
+!schemas/
+!schemas/**
+!*.html
+!*.js
+!*.css
+!deploy/
+!deploy/requirements.lock
+**/.env
+**/.env.*
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.log
+**/.venv/
+**/node_modules/
+backend/.env.example
+data/mqtt_history/

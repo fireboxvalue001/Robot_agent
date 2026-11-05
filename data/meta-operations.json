@@ -1,7 +1,7 @@
 {
-  "schema_version": "1.7.1",
+  "schema_version": "1.9.0",
   "library_id": "autolab.vd10.meta_operations",
-  "updated_at": "2026-10-26T00:00:00Z",
+  "updated_at": "2026-11-04T00:00:00Z",
   "categories": [
     {
       "id": "instrument",
@@ -76,6 +76,11 @@
     {
       "id": "solvent_remover",
       "name": "溶剂去除设备（待确定方法）",
+      "status": "interface_only"
+    },
+    {
+      "id": "extraction_heater",
+      "name": "抽提装置加热工位",
       "status": "interface_only"
     }
   ],
@@ -8755,15 +8760,15 @@
     },
     {
       "id": "robot.meta.monitor_reflux",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "name": "检查冷凝回流与虹吸状态",
       "category": "robot",
-      "description": "仅执行检查冷凝回流与虹吸状态这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "description": "读取指定工位回流、虹吸和冷凝反馈；计数须与独立试样绑定并排除加液虹吸。仅登记监测接口，不声称已接入六工位设备。",
       "status": "interface_only",
       "execution_policy": "interface_only",
       "source": {
         "type": "system_requirement",
-        "reference": "油脂提取实验流程.docx",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
         "sections": [
           "皮革油脂抽提实验流程"
         ]
@@ -8797,7 +8802,8 @@
           "reflux_ok",
           "siphon_ok",
           "condensation_ok",
-          "completed_cycles"
+          "completed_cycles",
+          "siphon_completed"
         ],
         "properties": {
           "reflux_ok": {
@@ -8812,7 +8818,11 @@
           "completed_cycles": {
             "type": "integer",
             "minimum": 0,
-            "description": "由已验证监测接口提供的累计完整回流循环数，不按经过时间推算"
+            "description": "当前试样及工位在加热抽提后完成的有效回流—虹吸循环数；排除加液虹吸，不以时间推算或汇总其他工位"
+          },
+          "siphon_completed": {
+            "type": "boolean",
+            "description": "当前观察阶段的一次虹吸已完成；不自动增加加热抽提循环计数"
           }
         }
       },
@@ -10524,6 +10534,744 @@
         "scenario": "leather_fat_extraction",
         "hardware_binding": "pending"
       }
+    },
+    {
+      "id": "robot.meta.collect_solid_fragments",
+      "version": "1.0.0",
+      "name": "执行一次固体碎屑收集",
+      "category": "robot",
+      "description": "只执行一次指定区域到目标容器的碎屑收集；全部碎屑是否收齐由流程检查，未收齐则有界重复，不在本能力内隐藏循环。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_id",
+          "target_object_id",
+          "control_profile_id"
+        ],
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_object_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "fragments_collected"
+        ],
+        "properties": {
+          "fragments_collected": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "robot.action.collect_solid_fragments",
+            "name": "执行一次固体碎屑收集",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "sample_id": "inputs.sample_id",
+              "target_object_id": "inputs.target_object_id",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      }
+    },
+    {
+      "id": "robot.meta.mix_solid_sample",
+      "version": "1.0.0",
+      "name": "混匀固体样品",
+      "category": "robot",
+      "description": "仅执行混匀固体样品这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_id",
+          "mixing_profile_id",
+          "control_profile_id"
+        ],
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mixing_profile_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "mixing_completed"
+        ],
+        "properties": {
+          "mixing_completed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "robot.action.mix_solid_sample",
+            "name": "混匀固体样品",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "sample_id": "inputs.sample_id",
+              "mixing_profile_id": "inputs.mixing_profile_id",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      }
+    },
+    {
+      "id": "robot.meta.spread_solid_sample",
+      "version": "1.0.0",
+      "name": "平铺固体样品",
+      "category": "robot",
+      "description": "仅执行平铺固体样品这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_id",
+          "target_object_id",
+          "control_profile_id"
+        ],
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_object_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "sample_spread"
+        ],
+        "properties": {
+          "sample_spread": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "robot.action.spread_solid_sample",
+            "name": "平铺固体样品",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "sample_id": "inputs.sample_id",
+              "target_object_id": "inputs.target_object_id",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      }
+    },
+    {
+      "id": "robot.meta.place_vessel_lid",
+      "version": "1.0.0",
+      "name": "放置称量瓶瓶盖",
+      "category": "robot",
+      "description": "仅执行放置称量瓶瓶盖这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lid_id",
+          "vessel_id",
+          "placement_state",
+          "control_profile_id"
+        ],
+        "properties": {
+          "lid_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "vessel_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "placement_state": {
+            "type": "string",
+            "minLength": 1,
+            "enum": [
+              "open_offset",
+              "closed"
+            ]
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "lid_placed"
+        ],
+        "properties": {
+          "lid_placed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "robot.action.place_vessel_lid",
+            "name": "放置称量瓶瓶盖",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "lid_id": "inputs.lid_id",
+              "vessel_id": "inputs.vessel_id",
+              "placement_state": "inputs.placement_state",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      }
+    },
+    {
+      "id": "robot.meta.inspect_liquid_level",
+      "version": "1.0.0",
+      "name": "读取抽提室液位",
+      "category": "robot",
+      "description": "仅执行读取抽提室液位这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assembly_id",
+          "inspection_profile_id",
+          "control_profile_id"
+        ],
+        "properties": {
+          "assembly_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inspection_profile_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "level_ratio",
+          "at_siphon_height",
+          "capacity_ok"
+        ],
+        "properties": {
+          "level_ratio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "at_siphon_height": {
+            "type": "boolean"
+          },
+          "capacity_ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "robot.action.inspect_liquid_level",
+            "name": "读取抽提室液位",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "assembly_id": "inputs.assembly_id",
+              "inspection_profile_id": "inputs.inspection_profile_id",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      }
+    },
+    {
+      "id": "extraction_heater.meta.set_temperature",
+      "version": "1.0.0",
+      "name": "设置抽提工位加热条件",
+      "category": "instrument",
+      "description": "仅执行设置抽提工位加热条件这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "temperature_c",
+          "control_profile_id"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "temperature_c": {
+            "type": "number"
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "temperature_set"
+        ],
+        "properties": {
+          "temperature_set": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "extraction_heater.action.set_temperature",
+            "name": "设置抽提工位加热条件",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "device_id": "inputs.device_id",
+              "temperature_c": "inputs.temperature_c",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      },
+      "instrument_id": "extraction_heater"
+    },
+    {
+      "id": "extraction_heater.meta.start",
+      "version": "1.0.0",
+      "name": "启动抽提工位加热",
+      "category": "instrument",
+      "description": "仅执行启动抽提工位加热这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "control_profile_id"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "running"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "extraction_heater.action.start",
+            "name": "启动抽提工位加热",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "device_id": "inputs.device_id",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      },
+      "instrument_id": "extraction_heater"
+    },
+    {
+      "id": "extraction_heater.meta.stop",
+      "version": "1.0.0",
+      "name": "停止抽提工位加热",
+      "category": "instrument",
+      "description": "仅执行停止抽提工位加热这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "status": "interface_only",
+      "execution_policy": "interface_only",
+      "source": {
+        "type": "system_requirement",
+        "reference": "油脂抽提实验步骤(第一次修订).docx",
+        "sections": [
+          "皮革油脂抽提实验流程"
+        ]
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "control_profile_id"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "control_profile_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "required": [
+          "stopped"
+        ],
+        "properties": {
+          "stopped": {
+            "type": "boolean"
+          }
+        }
+      },
+      "operation_tree": {
+        "type": "sequence",
+        "children": [
+          {
+            "instance_id": "action_01",
+            "type": "atomic_node",
+            "node_ref": "extraction_heater.action.stop",
+            "name": "停止抽提工位加热",
+            "source_type": "reserved_interface",
+            "execution_policy": "interface_only",
+            "parameter_bindings": {
+              "device_id": "inputs.device_id",
+              "control_profile_id": "inputs.control_profile_id"
+            }
+          }
+        ]
+      },
+      "precondition_refs": [],
+      "physical_requirements": [
+        "设备、对象、接近位姿和控制配置已登记并验证",
+        "反馈及异常停止接口可用；化学相容性与方法经负责人确认"
+      ],
+      "capability_boundary": {
+        "allowed": [
+          "作为已审核流程中的单步接口"
+        ],
+        "forbidden": [
+          "接口登记视为实机可执行",
+          "推测未确认的设备参数或安全条件"
+        ]
+      },
+      "failure_policy": {
+        "default_action": "stop",
+        "max_retries": 0
+      },
+      "extensions": {
+        "operation_granularity": "single_action",
+        "scenario": "leather_fat_extraction",
+        "hardware_binding": "pending"
+      },
+      "instrument_id": "extraction_heater"
     }
   ]
 }

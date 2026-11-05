@@ -22,7 +22,7 @@ def catalog(root=ROOT):
     for entry in entries:
         if entry["engine"] not in {"legacy_linear", "conditional"}:
             raise ValueError("Unknown scenario engine")
-        for pattern in entry.get("routing_patterns", []):
+        for pattern in entry.get("routing_patterns", []) + entry.get("routing_exclusions", []):
             re.compile(pattern)
     return entries
 
@@ -48,7 +48,8 @@ def resolve(text, scenario_id="auto", root=ROOT):
         matches = [get_entry(scenario_id, root)]
     else:
         matches = [entry for entry in entries if entry.get("enabled", True) and
-                   any(re.search(pattern, text, re.I) for pattern in entry.get("routing_patterns", []))]
+                   any(re.search(pattern, text, re.I) for pattern in entry.get("routing_patterns", [])) and
+                   not any(re.search(pattern, text, re.I) for pattern in entry.get("routing_exclusions", []))]
     if len(matches) != 1:
         return {"status": "needs_input", "reason": "ambiguous" if matches else "unmatched", "scenario_id": None,
                 "message": "匹配到多个实验场景，请明确选择一个场景；不同场景不会自动拼接。" if matches else "尚未匹配已登记场景，请选择场景或补充实验目标。",

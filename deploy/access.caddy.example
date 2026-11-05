@@ -1,0 +1,7 @@
+# Fail closed until internal access sources have been confirmed.
+respond "Internal access is not configured." 403
+
+# Replace the respond line ONLY after review, using actual public IPs/CIDRs:
+# @outside not remote_ip YOUR_PUBLIC_IP/32
+# respond @outside "Internal access only." 403
+# Do not remove all access restrictions to make a failing request work.

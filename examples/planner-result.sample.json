@@ -40,8 +40,8 @@
     "planId": "plan_33333333-3333-4333-8333-333333333333",
     "capabilityLibrary": {
       "id": "autolab.vd10.meta_operations",
-      "version": "1.7.1",
-      "checksum": "sha256:ec61178734c04aa41add33a669133b2b8cb16e07c8eff95ce6ee80e1e81ef52f"
+      "version": "1.9.0",
+      "checksum": "sha256:1cb3dd8761cc90c86ee381057fd9629b5764ad05750abb043517159b21509de5"
     },
     "operations": [
       {

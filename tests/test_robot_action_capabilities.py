@@ -101,7 +101,7 @@ class RobotActionCapabilitiesTests(unittest.TestCase):
         for scenario_id, expected_count in [("vd10_single_sample_demo", 5), ("liquid_transfer_demo", 1)]:
             store = KnowledgeStore(scenario_id=scenario_id)
             self.assertEqual(len(store.scenario["operations"]), expected_count)
-            self.assertEqual(store.metadata()["source_operation_count"], 93)
+            self.assertEqual(store.metadata()["source_operation_count"], 101)
 
 
 if __name__ == "__main__":

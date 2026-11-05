@@ -21,7 +21,14 @@
     }}},
     "nodes": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "kind", "label", "phase_id", "requires"], "properties": {
       "id": {"type": "string"}, "kind": {"enum": ["start", "action", "wait", "guard", "decision", "loop_check", "monitored_hold", "compute", "end"]},
-      "label": {"type": "string"}, "phase_id": {"type": "string"}, "requires": {"type": "array", "items": {"type": "string"}}, "display": {"type": "object"}
+      "label": {"type": "string"}, "phase_id": {"type": "string"}, "requires": {"type": "array", "items": {"type": "string"}}, "display": {
+        "type": "object", "properties": {
+          "title": {"type": "string", "minLength": 1},
+          "fields": {"type": "array", "items": {"type": "object", "required": ["argument"], "properties": {
+            "argument": {"type": "string", "minLength": 1}, "label": {"type": "string"}, "unit": {"type": "string"}
+          }}}
+        }
+      }
     }}}
   }
 }

@@ -1,0 +1,17 @@
+{$VD10_DOMAIN} {
+    import /etc/caddy/access.caddy
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy same-origin
+        Permissions-Policy "microphone=(self), camera=()"
+    }
+    request_body {
+        max_size 12MB
+    }
+    reverse_proxy app:8877 {
+        transport http {
+            response_header_timeout 150s
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+  "resources": [
+    {
+      "id": "vd10.screen.binding",
+      "name": "既有C2能力的设备与界面绑定",
+      "type": "screen_adapter_profile",
+      "implemented": false,
+      "notice": "C2仍为草案或待验证；设备绑定、标定、控制及反馈需执行端确认，禁止执行。"
+    }
+  ]
+}

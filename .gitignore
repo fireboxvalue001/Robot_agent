@@ -8,8 +8,14 @@ backend/.env
 __pycache__/
 **/__pycache__/
 data/mqtt_history/*.jsonl
+data/execution_history/
 *.pyc
 *.pyo
 *.log
 .pytest_cache/
 node_modules/
+deploy/server.env
+deploy/access.caddy
+deploy/*.tar
+deploy/*.tar.gz
+deploy/*.zip

@@ -12,7 +12,7 @@ from pydantic import Field
 
 
 class ExtractionCalculation(StrictModel):
-    calculation: Literal["constant_mass", "moisture", "extractable_content", "reflux_completion"]
+    calculation: Literal["constant_mass", "moisture", "extractable_content", "extractable_content_from_dry_sample", "reflux_completion"]
     values: dict[str, float | int] = Field(max_length=6)
 
 
@@ -89,8 +89,9 @@ def resolve_scenario(request: ScenarioSelection) -> dict:
 
 @router.post("/leather-extraction/evaluate")
 def evaluate_extraction_data(request: ExtractionCalculation) -> dict:
-    from .extraction import calculate_content, calculate_moisture, constant_mass, reflux_completion
-    functions = {"constant_mass": constant_mass, "moisture": calculate_moisture, "extractable_content": calculate_content, "reflux_completion": reflux_completion}
+    from .extraction import calculate_content, calculate_dry_content, calculate_moisture, constant_mass, reflux_completion
+    functions = {"constant_mass": constant_mass, "moisture": calculate_moisture, "extractable_content": calculate_content,
+                 "extractable_content_from_dry_sample": calculate_dry_content, "reflux_completion": reflux_completion}
     try:
         result = functions[request.calculation](**request.values)
     except (ValueError, TypeError) as exc:

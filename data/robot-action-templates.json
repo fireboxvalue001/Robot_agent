@@ -1,6 +1,6 @@
 {
   "library_id": "autolab.vd10.meta_operations",
-  "library_version": "1.7.1",
+  "library_version": "1.9.0",
   "kind": "action_composition_examples",
   "notice": "这里只保存组合顺序，不定义元操作。实例化时需绑定参数、满足前置条件，再经规划和物理校验。",
   "recipes": [

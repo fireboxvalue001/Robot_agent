@@ -5,19 +5,32 @@ const path = require("path");
 const vm = require("vm");
 const root = path.resolve(__dirname, "..");
 const context = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(root, "operation-display.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "extraction-flow.js"), "utf8"), context);
 const scenario = JSON.parse(fs.readFileSync(path.join(root, "knowledge/planner_scenarios/leather_extraction.json"), "utf8"));
 const resources = JSON.parse(fs.readFileSync(path.join(root, "data/leather-extraction-resources.json"), "utf8"));
 const workflow = {name:scenario.name, phases:scenario.phases, nodes: scenario.nodes.map(node => ({...node, status: node.requires.length ? "needs_input" : "covered", reason: "定义已匹配，尚未执行"})), parameters: {}, resources: resources.resources};
 const result = context.renderExtractionWorkflow(workflow);
 assert(result.includes('<svg viewBox='));
-assert(result.includes("称量瓶恒重"));
+assert(result.includes("称量瓶及瓶盖恒重"));
 assert(result.includes("空抽提瓶恒重"));
-assert(result.includes("抽提后恒重"));
+assert(result.includes("萃取物干燥与恒重"));
+assert(result.includes("皮革样品干燥与恒重") && result.includes("相邻两次质量差≤待确认 mg"));
+workflow.parameters.weighing_threshold_mg = {value:3};
+assert(context.renderExtractionWorkflow(workflow).includes("相邻两次质量差≤3 mg"), "Diagram must use the actual threshold, not a fixed 5mg label");
+assert(!result.includes("蒸馏冷凝回收") && !result.includes("水分比例"));
+assert(result.includes("各工位≥待确认次；加液虹吸不计数"));
 assert(result.includes("达到上限 → 停止复核"));
 assert(result.includes("否：再次干燥"));
 assert(result.includes("数据") && result.includes("尚未执行"));
 assert(!result.includes("元操作") && !result.includes("C2"));
+const compact = context.renderConfiguredWorkflow({...workflow,
+  task_scope:{mode:"partial",selected_segments:[{label:"含量计算"}]},
+  planning_context:{notice:"本图为一份独立试样的可复用流程。"}});
+assert(!compact.includes("本次只编排：") && !compact.includes("节点定义匹配"));
+assert(!compact.includes('<p>本图为一份独立试样的可复用流程。'));
+assert(compact.includes("结构化流程定义") && compact.includes("展开各阶段"));
+assert(context.renderConfiguredWorkflow({...workflow,task_scope:{mode:"needs_selection"}}).includes("尚未确定本次操作范围"));
 for (const node of scenario.nodes.filter(item => item.kind === "loop_check")) {
   const target = scenario.nodes.find(item => item.id === node.on_pass);
   const edge = result.match(new RegExp(`<g data-phase-edge="${node.phase_id}:${target.phase_id}">([\\s\\S]*?)</g>`));

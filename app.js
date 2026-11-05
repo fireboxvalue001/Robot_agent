@@ -42,6 +42,7 @@ let latestPlannerMessage = null;
 let latestPhysicalValidation = null;
 let latestReasoningTrace = null;
 let latestConditionalWorkflow = null;
+let conditionalEditorDirty = false;
 let activeExternalPlanId = null;
 let latestSemanticSource = { type: "live" };
 let latestInputSource = "text";
@@ -74,7 +75,7 @@ async function initialize() {
   try {
     const [treeResponse, metaResponse, spatialResponse] = await Promise.all([
       fetch(DATA_PATH),
-      fetch(META_OPERATION_PATH),
+      fetch(META_OPERATION_PATH, { cache: "no-store" }),
       fetch(SPATIAL_LOCATION_PATH)
     ]);
     if (!treeResponse.ok) throw new Error(`能力树读取失败：HTTP ${treeResponse.status}`);
@@ -482,12 +483,16 @@ function receivePlannerResult(message, sourceLabel = "外部任务编排接口�
     latestPlannerMessage?.reasoning_trace || null;
   latestPhysicalValidation = null;
   latestConditionalWorkflow = latestPlannerMessage?.workflow_definition || null;
+  conditionalEditorDirty = false;
   activeExternalPlanId = null;
   workflow = [];
   resetExecutionState();
   if (latestConditionalWorkflow) {
+    const projection = projectConditionalOperations(latestConditionalWorkflow);
+    workflow = projection.steps;
     const issues = latestPlannerMessage.warnings || [];
-    lastAnalysis = { matched: latestPlannerMessage.status === "success",
+    issues.push(...projection.errors);
+    lastAnalysis = { matched: latestPlannerMessage.status === "success" && !projection.errors.length,
       message: latestReasoningTrace?.decision?.status === "MODEL_ERROR" ? latestReasoningTrace.decision.message : issues.length ? `已生成${latestConditionalWorkflow.name || "实验"}草案，${issues.length}项参数或方法需要确认，请查看流程中的标记。` : "逻辑流程检查通过，待设备与现场确认。",
       factors: [`场景：${latestConditionalWorkflow.name || "实验流程"}`, "条件流程：不转换为线性执行链", "物理状态：待确认，禁止直接执行"] };
     renderAll();
@@ -558,6 +563,33 @@ function receivePlannerResult(message, sourceLabel = "外部任务编排接口�
   };
   renderAll();
   showToast(lastAnalysis.message);
+}
+
+function projectConditionalOperations(definition) {
+  const steps = [];
+  const errors = [];
+  for (const node of definition.nodes || []) {
+    if (!node.operation_id) {
+      if (node.kind === "action") errors.push(`${node.label} 缺少C2能力引用`);
+      continue;
+    }
+    const operation = metaIndex.get(node.operation_id);
+    if (!operation || operation.status === "disabled" || operation.version !== node.operation_version) {
+      errors.push(`${node.operation_id} 未登记、已停用或版本不匹配`);
+      continue;
+    }
+    const params = {};
+    for (const [key, binding] of Object.entries(node.arguments || {})) {
+      if ("value" in binding) params[key] = binding.value;
+      else if (binding.parameter_ref && definition.parameters[binding.parameter_ref]) params[key] = definition.parameters[binding.parameter_ref].value;
+      else params[key] = binding;
+    }
+    steps.push({ id: node.id, operation, params, source: "C2能力编排视图",
+      evidence: ["仅供编辑；分支、循环及反馈约束保留在顶部流程中"],
+      callDisplay: node.display || {}, callLabel: node.label,
+      inputBindings: node.arguments || {}, configuredStatus: node.status, configuredReason: node.reason });
+  }
+  return { steps: errors.length ? [] : steps, errors };
 }
 
 function receivePhysicalValidation(message) {
@@ -1192,7 +1224,7 @@ function addMetaOperation(metaId, options = {}) {
 }
 
 function invalidateReasoningTrace(message) {
-  latestConditionalWorkflow = null;
+  if (latestConditionalWorkflow) conditionalEditorDirty = true;
   if (!latestReasoningTrace) return;
   const checks = latestReasoningTrace.validation || {};
   [
@@ -1508,6 +1540,13 @@ function parseIntent(rawText, semanticMessage = null) {
   showToast(lastAnalysis.message);
 }
 
+function isDataCalculationOnly() {
+  const nodes = latestConditionalWorkflow?.nodes || [];
+  return !conditionalEditorDirty && workflow.length === 0 && nodes.some(node => node.kind === "compute") &&
+    nodes.every(node => !node.operation_id && (["start", "compute", "end"].includes(node.kind) ||
+      (node.kind === "guard" && ["provided_measurement", "external_confirmation"].includes(node.check?.type))));
+}
+
 function validateWorkflow() {
   const issues = [];
   let physicalReady = true;
@@ -1546,8 +1585,22 @@ function validateWorkflow() {
     });
   }
 
+  if (latestConditionalWorkflow) {
+    physicalReady = false;
+    if (conditionalEditorDirty || !latestReasoningTrace?.decision?.logical_executable) {
+      const reasons = latestConditionalWorkflow.clarifications?.map((item) => item.label).filter(Boolean) || [];
+      issues.push({ message: conditionalEditorDirty ? "操作卡片已手动修改，请重新编排和校验；不需要因此补填设备参数。"
+        : reasons.length ? reasons.join("；") : latestReasoningTrace?.decision?.message || "顶部流程尚未通过逻辑校验，请查看任务流程说明" });
+    }
+    workflow.forEach((step) => {
+      if (step.configuredStatus && step.configuredStatus !== "covered") {
+        issues.push({ id: step.id, message: step.configuredReason || "此操作仍有待补条件" });
+      }
+    });
+  }
+
   return {
-    semanticReady: workflow.length > 0 && !issues.some((issue) => !issue.warning),
+    semanticReady: (workflow.length > 0 || isDataCalculationOnly()) && !issues.some((issue) => !issue.warning),
     physicalReady: workflow.length > 0 && physicalReady,
     issues
   };
@@ -1590,6 +1643,7 @@ function physicalMessage(step) {
 
 function renderAll() {
   if (!latestReasoningTrace) latestConditionalWorkflow = null;
+  if (!latestConditionalWorkflow) conditionalEditorDirty = false;
   const checklist = $("clarification-checklist");
   if (checklist) {
     checklist.hidden = !latestConditionalWorkflow;
@@ -1605,7 +1659,39 @@ function renderAll() {
   syncExecutionRecords();
   renderExecutionStatus(validation);
   renderStructuredResults(validation);
+  window.dispatchEvent(new CustomEvent("autolab:archive-changed"));
 }
+
+function getExecutionArchiveSnapshot() {
+  if (!latestConditionalWorkflow && !workflow.length) return null;
+  const conditional = Boolean(latestConditionalWorkflow);
+  const validation = validateWorkflow();
+  return {
+    task_id: taskId,
+    source_text: $("intent-input").value,
+    kind: conditional ? "conditional" : "linear",
+    record_source: !conditional && executionRun.status === "simulation_completed" ? "simulation" : "plan_draft",
+    plan: {
+      capability_library: metaOperationLibraryInfo,
+      reasoning_trace: latestReasoningTrace,
+      definition: conditional ? latestConditionalWorkflow : createTaskHandoff(validation),
+      editor_projection: conditional ? { dirty: conditionalEditorDirty, execution_allowed: false,
+        steps: workflow.map((step) => ({ step_id: step.id, operation_id: step.operation.meta_operation_id,
+          operation_version: step.operation.version, params: step.params, input_bindings: step.inputBindings || {}, display: step.callDisplay || {} })) } : null
+    },
+    execution_run: conditional ? { status: "not_started", started_at: null, finished_at: null } : executionRun,
+    execution_records: conditional ? latestConditionalWorkflow.nodes.map((node) => ({
+      step_id: node.id, name: OperationDisplay.describe({ label: node.label || node.id, display: node.display,
+        capabilityName: node.operation_name, bindings: node.arguments, parameters: latestConditionalWorkflow.parameters }).title,
+      capability_name: node.operation_name || null, meta_operation_id: node.operation_id || null,
+      status: "pending", started_at: null, finished_at: null, duration_ms: null,
+      key_data: node.input_bindings || {}
+    })) : executionRecords,
+    structured_result: conditional ? { result_status: "not_executed", measurements: null } : buildStructuredExperimentResult(validation)
+  };
+}
+
+window.getExecutionArchiveSnapshot = getExecutionArchiveSnapshot;
 
 function renderReasoningTrace() {
   const container = $("reasoning-trace");
@@ -1691,7 +1777,9 @@ function renderReasoningTrace() {
   };
   const goals = goalItems.map(renderGoal).join("");
   const candidateGoals = scenarioGoals.map(renderGoal).join("");
-  const cotFlow = latestConditionalWorkflow ? renderConfiguredWorkflow(latestConditionalWorkflow) : renderCotDiagram(trace, goalItems, decisionLabels);
+  const cotFlow = latestConditionalWorkflow
+    ? `${conditionalEditorDirty ? '<p class="chip chip-warning">下方操作卡片已修改，顶部图为修改前的参考流程，请重新编排校验。</p>' : ""}${renderConfiguredWorkflow(latestConditionalWorkflow)}`
+    : renderCotDiagram(trace, goalItems, decisionLabels);
   const mappings = (trace.mappings || []).map((mapping) => {
     const inputs = (mapping.inputs || []).map((input) =>
       `${input.name}=${traceDisplayValue(input.value)} ← ${input.source || "无来源"}`
@@ -1872,21 +1960,25 @@ function traceDisplayValue(value) {
 }
 
 function renderFlow(validation) {
-  if (latestConditionalWorkflow) {
-    $("semantic-flow").innerHTML = '<li class="empty">条件流程见上方阶段总览；恒重与异常分支不会转换为一次性线性操作链。</li>';
-    $("physical-flow").innerHTML = '<li class="empty">设备、控制配置、空间位置和实验方法尚需独立确认，当前禁止执行。</li>';
-    $("semantic-state").textContent = lastAnalysis?.matched ? "逻辑检查通过" : "草案待补充";
-    $("physical-state").textContent = "待独立确认";
-    $("simulate-execution").disabled = true;
-    return;
-  }
-  $("simulate-execution").disabled = false;
+  const calculationOnly = isDataCalculationOnly();
+  $("simulate-execution").disabled = Boolean(latestConditionalWorkflow);
   $("semantic-flow").innerHTML = workflow.map((step, index) =>
     renderFlowCard(step, index, validation, false)
   ).join("");
+  if (calculationOnly) {
+    const calculations = latestConditionalWorkflow.nodes.filter(node => node.kind === "compute");
+    $("semantic-flow").innerHTML = `<li class="empty" role="status"><strong>已生成 ${calculations.length} 个软件计算步骤</strong><p>${calculations.map(node => escapeHtml(node.label)).join("；")}</p><p>本任务仅处理已有数据，无需添加机器人或仪器元操作；输入数据、依赖与计算规则见顶部流程。</p></li>`;
+  }
+  const globalIssues = validation.issues.filter((issue) => !issue.id && !issue.physical);
+  if (globalIssues.length) {
+    $("semantic-flow").innerHTML = `<li class="empty" role="status">${globalIssues.map((issue) => escapeHtml(issue.message)).join("<br>")}</li>` + $("semantic-flow").innerHTML;
+  }
   $("physical-flow").innerHTML = workflow.map((step, index) =>
     renderFlowCard(step, index, validation, true)
   ).join("");
+  if (calculationOnly) {
+    $("physical-flow").innerHTML = '<li class="empty" role="status">本任务仅使用已有数据进行软件计算，无需机械臂、加热或称量动作。测量来源、单位和数据有效性仍须核对；此提示不表示已经完成计算或生成实验结果。</li>';
+  }
 
   document.querySelectorAll(".flow-remove").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1916,12 +2008,14 @@ function renderFlow(validation) {
     });
   });
 
-  $("semantic-state").textContent = workflow.length
-    ? (validation.semanticReady ? "匹配通过" : "存在问题")
+  $("semantic-state").textContent = calculationOnly
+    ? (validation.semanticReady ? "计算流程已匹配" : latestConditionalWorkflow.clarifications?.some(item => item.kind === "parameter") ? "待补数据" : "存在问题")
+    : workflow.length
+    ? (validation.semanticReady ? "匹配通过" : conditionalEditorDirty ? "待重新校验" : "存在问题")
     : "待生成";
   $("semantic-state").className =
-    `check-state ${workflow.length ? (validation.semanticReady ? "pass" : "error") : ""}`;
-  $("physical-state").textContent = workflow.length
+    `check-state ${workflow.length || calculationOnly ? (validation.semanticReady ? "pass" : "error") : ""}`;
+  $("physical-state").textContent = calculationOnly ? "无需物理元操作" : workflow.length
     ? (validation.physicalReady ? "校验通过" : "待确认")
     : "待校验";
   $("physical-state").className =
@@ -1929,19 +2023,22 @@ function renderFlow(validation) {
 }
 
 function renderFlowCard(step, index, validation, physicalStage) {
+  const call = OperationDisplay.describe({ capabilityName: step.operation.name, label: step.callLabel,
+    display: step.callDisplay, bindings: step.inputBindings || step.params, parameters: latestConditionalWorkflow?.parameters });
   const issue = validation.issues.find((item) =>
     item.id === step.id && Boolean(item.physical) === physicalStage
   );
   const message = physicalStage
     ? physicalMessage(step)
     : (issue?.message || `元操作包含 ${step.operation.internal_operations.length} 个内部小操作`);
-  const parameterSummary = formatParameterSummary(step.params);
+  const parameterSummary = step.callDisplay?.fields ? call.summary : formatParameterSummary(step.params);
   return `
     <li class="flow-card flow-${escapeHtml(step.operation.category)} ${issue ? "warn" : ""}" data-step-id="${escapeHtml(step.id)}"
         ${physicalStage ? "" : 'draggable="true"'}>
       <span class="flow-index">${index + 1}</span>
       <div class="flow-main">
-        <strong>${escapeHtml(step.operation.name)}</strong>
+        <strong>${escapeHtml(call.title)}</strong>
+        ${call.title !== step.operation.name ? `<span class="flow-meta">使用能力：${escapeHtml(step.operation.name)}</span>` : ""}
         <code>${escapeHtml(step.operation.meta_operation_id)}</code>
         ${parameterSummary ? `<span class="flow-params">${escapeHtml(parameterSummary)}</span>` : ""}
         <span class="flow-meta">${escapeHtml(message)}</span>
@@ -1984,7 +2081,9 @@ function formatParameterSummary(params) {
       (!Array.isArray(value) || value.length > 0);
   });
   return values.map(([key, value]) => {
-    let display = Array.isArray(value) ? value.join("、") : String(value);
+    let display = Array.isArray(value) ? value.join("、") : value && typeof value === "object"
+      ? value.result_ref ? `前序反馈 ${value.result_ref}` : value.resource_ref ? `待绑定 ${value.resource_ref}` : value.parameter_ref ? `待补充 ${value.parameter_ref}` : JSON.stringify(value)
+      : String(value);
     if (key === "volume_ml") display = `${display} mL`;
     if ((key === "target_count" || key === "sample_count") && /^\d+$/.test(display)) {
       display = `${display}份`;
@@ -2064,7 +2163,9 @@ function syncExecutionRecords() {
     return existing || {
       step_id: step.id,
       meta_operation_id: step.operation.meta_operation_id,
-      name: step.operation.name,
+      name: OperationDisplay.describe({ capabilityName: step.operation.name, label: step.callLabel,
+        display: step.callDisplay, bindings: step.inputBindings || step.params, parameters: latestConditionalWorkflow?.parameters }).title,
+      capability_name: step.operation.name,
       category: step.operation.category,
       status: "pending",
       started_at: null,
@@ -2076,6 +2177,10 @@ function syncExecutionRecords() {
 }
 
 function simulateExecution() {
+  if (latestConditionalWorkflow) {
+    showToast("条件流程的操作卡片仅供编辑，尚未接入执行运行器");
+    return;
+  }
   if (!workflow.length) {
     showToast("请先生成任务流程");
     return;

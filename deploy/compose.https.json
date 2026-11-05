@@ -1,0 +1,21 @@
+{
+  "services": {
+    "caddy": {
+      "image": "caddy:2.10.2-alpine",
+      "environment": { "VD10_DOMAIN": "${VD10_DOMAIN:?Set the verified project domain first}" },
+      "ports": ["80:80", "443:443"],
+      "volumes": [
+        { "type": "bind", "source": "./Caddyfile", "target": "/etc/caddy/Caddyfile", "read_only": true, "bind": { "create_host_path": false } },
+        { "type": "bind", "source": "./access.caddy", "target": "/etc/caddy/access.caddy", "read_only": true, "bind": { "create_host_path": false } },
+        "caddy-data:/data",
+        "caddy-config:/config"
+      ],
+      "depends_on": { "app": { "condition": "service_healthy" } },
+      "restart": "unless-stopped",
+      "security_opt": ["no-new-privileges:true"],
+      "mem_limit": "256m",
+      "logging": { "driver": "json-file", "options": { "max-size": "10m", "max-file": "3" } }
+    }
+  },
+  "volumes": { "caddy-data": {}, "caddy-config": {} }
+}

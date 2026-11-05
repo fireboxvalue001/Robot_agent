@@ -28,7 +28,7 @@ def constant_mass(previous_g, current_g, threshold_mg, iteration, max_cycles):
     if type(iteration) is not int or type(max_cycles) is not int or min(previous_g, current_g) < 0 or threshold_mg <= 0 or not 1 <= iteration <= max_cycles <= 20:
         raise ValueError("恒重输入超出范围")
     delta_mg = abs(Decimal(str(current_g)) - Decimal(str(previous_g))) * 1000
-    passed = delta_mg < Decimal(str(threshold_mg))
+    passed = delta_mg <= Decimal(str(threshold_mg))
     return {"delta_mg": float(delta_mg), "passed": passed, "next": "pass" if passed else "limit" if iteration >= max_cycles else "repeat"}
 
 
@@ -53,6 +53,19 @@ def calculate_moisture(container_g, wet_total_g, dry_total_g):
     if not 0 <= container_g < dry_total_g <= wet_total_g:
         raise ValueError("水分测定称量值的顺序不合理")
     return {"moisture_fraction": (wet_total_g - dry_total_g) / (wet_total_g - container_g)}
+
+
+def calculate_dry_content(empty_g, final_g, dry_sample_g):
+    """Revised method uses weighed dry sample without another water correction."""
+    for value in (empty_g, final_g, dry_sample_g):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError("称量数据必须为有限数值")
+    empty, final, dry = (Decimal(str(v)) for v in (empty_g, final_g, dry_sample_g))
+    if empty < 0 or final < empty or dry <= 0 or final - empty > dry:
+        raise ValueError("空瓶、萃取物或实际干样质量不合理，需要复核")
+    extract = final - empty
+    return {"extract_mass_g": float(extract), "sample_dry_mass_g": float(dry),
+            "extractable_content_percent_dry_basis": float(extract / dry * 100)}
 
 
 def reflux_completion(completed_cycles, required_cycles):

@@ -42,6 +42,8 @@ function renderConfiguredWorkflow(definition) {
     const loops = nodes.filter((node) => node.kind === "loop_check");
     return `<details class="extraction-phase"><summary><b>${esc(phase)}</b><span>${nodes.length} 步 · ${missing.length ? `${missing.length} 处待处理` : "定义已匹配"}${loops.length ? " · 含恒重循环" : ""}</span></summary>
       <div class="extraction-node-list">${nodes.map((node) => {
+        const call = OperationDisplay.describe({ label: node.label, capabilityName: node.operation_name,
+          display: node.display, bindings: node.arguments || node.input_bindings, parameters: definition.parameters });
         const isCheck = ["loop_check", "decision", "guard"].includes(node.kind);
         const branches = [];
         for (const [key, label] of [["on_pass", "是"], ["on_fail", "否，更新上次质量后返回"], ["on_limit", "达到循环上限"], ["on_timeout", "超时"], ["on_error", "异常"]]) {
@@ -53,7 +55,9 @@ function renderConfiguredWorkflow(definition) {
           return binding ? `${binding.label || key}=${binding.value}${binding.unit || ""}（${binding.source === "provided_document" ? "实验文档" : binding.source === "user_supplement" ? "用户补充方案" : "用户输入"}）` : `待补充：${node.reason.replace("待补充：", "")}`;
         });
         return `<article class="extraction-node ${node.status === "covered" ? "matched" : "missing"}${isCheck ? " condition" : ""}">
-          <div class="extraction-node-title"><span>${isCheck ? "◇ 判断" : node.kind === "compute" ? "计算" : node.kind === "monitored_hold" ? "持续监测" : "操作"}</span><b>${esc(node.label)}</b></div>
+          <div class="extraction-node-title"><span>${isCheck ? "◇ 判断" : node.kind === "compute" ? "计算" : node.kind === "monitored_hold" ? "持续监测" : "操作"}</span><b>${esc(call.title)}</b></div>
+          ${call.capabilityName ? `<p>使用能力：${esc(call.capabilityName)}</p>` : ""}
+          ${call.summary ? `<p>${esc(call.summary)}</p>` : ""}
           <p>${esc(node.reason)}</p>${node.display?.notice ? `<p>${esc(node.display.notice)}</p>` : ""}
           ${params.length ? `<details><summary>参数及来源</summary><p>${esc(params.join("；"))}</p></details>` : ""}
           ${node.data_refs?.length ? `<details><summary>引用前面步骤的数据</summary><p>${esc(node.data_refs.map((ref) => {const [id, field] = ref.split("."); return `${labels.get(id) || id}：${field}`;}).join("；"))}</p></details>` : ""}
@@ -61,10 +65,12 @@ function renderConfiguredWorkflow(definition) {
         </article>`;
       }).join("")}</div></details>`;
   }).join('<div class="extraction-phase-arrow">↓</div>');
-  const matched = definition.nodes.filter((node) => node.status === "covered").length;
-  return `<div class="extraction-workflow"><p>已匹配 ${matched}/${definition.nodes.length} 个流程节点。绿色表示逻辑定义已匹配，不表示已经执行；黄色表示需要补充。点击阶段展开单步动作和判断分支。</p>
+  const scope = definition.task_scope;
+  const scopeNotice = scope?.mode === "needs_selection"
+    ? '<p class="chip chip-warning">尚未确定本次操作范围，请在C1待补清单中选择；当前不会生成完整实验流程。</p>' : "";
+  return `<div class="extraction-workflow">${scopeNotice}
     ${renderConfiguredDiagram(groups, definition)}
-    <details><summary>展开各阶段的单步动作、参数和分支</summary><div class="extraction-overview">${phaseItems}</div></details><details><summary>待绑定的设备与空间位置</summary>${definition.resources.map((resource) => `<p>${esc(resource.name)}：${esc(resource.device_id || "设备待绑定")} / ${esc(resource.location_id || "位置待登记")}</p>`).join("")}</details>
+    <details><summary>展开各阶段的单步动作、参数和分支</summary><div class="extraction-overview">${phaseItems}</div></details><details><summary>待绑定的设备与执行配置</summary>${definition.resources.map((resource) => `<p>${esc(resource.name || resource.id)}：${resource.type === "screen_adapter_profile" ? esc(resource.notice) : `${esc(resource.device_id || "设备待绑定")} / ${esc(resource.location_id || "位置待登记")}`}</p>`).join("")}</details>
     <details><summary>结构化流程定义（交接用）</summary><pre>${esc(JSON.stringify(definition, null, 2))}</pre></details></div>`;
 }
 
@@ -82,15 +88,31 @@ function renderConfiguredDiagram(groups, definition) {
     const loop = diagram.shape === "decision" || Boolean(loopNode);
     const missing = nodes.filter((node) => node.status !== "covered").length;
     const color = missing ? "#e6c15a" : "#4dcd9c";
-    const height = loop ? 108 : 68;
+    const actions = nodes.filter(node => node.operation_id);
+    const singleCall = actions.length === 1 ? OperationDisplay.describe({ label: actions[0].label, capabilityName: actions[0].operation_name,
+      display: actions[0].display, bindings: actions[0].arguments || actions[0].input_bindings, parameters: definition.parameters }) : null;
+    const checkCount = nodes.filter(node => ["guard", "decision", "loop_check"].includes(node.kind)).length;
+    const heading = singleCall && actions[0].display?.title
+      ? `${phase.match(/^\d+\.\s*/)?.[0] || ""}${singleCall.title}` : phase;
+    const titleLines = OperationDisplay.wrap(heading);
+    const capabilityLines = singleCall?.capabilityName ? OperationDisplay.wrap(`使用能力：${singleCall.capabilityName}`) : [];
+    const height = loop ? 108 : Math.max(68, (titleLines.length + capabilityLines.length + 1) * 21 + 24);
     const middle = y + height / 2;
     positions.set(phaseId, {top:y, bottom:y+height, middle});
     shapes += `<g><title>${esc(phase)}：${missing ? `${missing}个节点待补充` : "逻辑定义已匹配，尚未执行"}</title>`;
     shapes += loop
       ? `<polygon points="410,${y} 610,${middle} 410,${y + height} 210,${middle}" fill="#28243f" stroke="${color}"/>`
       : `<rect x="210" y="${y}" width="400" height="${height}" rx="8" fill="#1d2b35" stroke="${color}"/>`;
-    const subtitle = diagram.subtitle ? diagram.subtitle.replace(/\{\{([a-z0-9_]+)\}\}/g, (_, key) => definition.parameters[key]?.value ?? "待确认") : `${nodes.length}个单步及检查 · ${missing ? `${missing}处待补充` : "定义已匹配"}`;
-    shapes += `<text x="410" y="${middle - 7}" class="extraction-svg-title">${esc(phase)}</text><text x="410" y="${middle + 16}">${esc(subtitle)}</text></g>`;
+    const subtitle = diagram.subtitle ? diagram.subtitle.replace(/\{\{([a-z0-9_]+)\}\}/g, (_, key) => definition.parameters[key]?.value ?? "待确认")
+      : `${actions.length ? `${actions.length}次能力调用 · ${checkCount}项检查` : `${nodes.length}个流程控制节点`} · ${missing ? `${missing}处待补充` : "定义已匹配"}`;
+    if (loop) {
+      shapes += `<text x="410" y="${middle - 7}" class="extraction-svg-title">${esc(phase)}</text><text x="410" y="${middle + 16}">${esc(subtitle)}</text>`;
+    } else {
+      const lines = [...titleLines, ...capabilityLines, subtitle];
+      const firstY = middle - (lines.length - 1) * 10.5;
+      shapes += lines.map((line, index) => `<text x="410" y="${firstY + index * 21}"${index < titleLines.length ? ' class="extraction-svg-title"' : ""}>${esc(line)}</text>`).join("");
+    }
+    shapes += "</g>";
     if (loop) {
       const limit = definition.parameters[diagram.limit_ref || loopNode?.max_iterations_ref]?.value;
       const repeatLines = diagram.repeat_lines || ["否：返回重试"];
@@ -120,7 +142,7 @@ function renderConfiguredDiagram(groups, definition) {
       ? `<path d="M410 ${from.bottom} V${to.top - 3}" marker-end="url(#extraction-arrow)"/>${label ? `<text x="435" y="${from.bottom + 20}">${esc(label)}</text>` : ""}`
       : `<path d="M610 ${from.middle} H850 V${to.middle} H613" marker-end="url(#extraction-arrow)"/><text x="825" y="${from.middle-8}">${esc(label || "继续")}</text>`) + "</g>";
   }
-  shapes += `<text x="450" y="${y + 10}">异常或超时 → 对应设备停止分支 → 人工复核</text>`;
+  shapes += `<text x="450" y="${y + 10}">异常或超时 → 对应异常处理分支 → 人工复核</text>`;
   return `<div class="extraction-chart"><svg viewBox="0 0 910 ${y + 40}" role="img" aria-label="${esc(definition.name || "实验")}流程图"><defs><marker id="extraction-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#9dacbf" stroke="none"/></marker></defs><g fill="none" stroke="#9dacbf" stroke-width="1.7">${edges}</g>${shapes}</svg></div>`;
 }
 
