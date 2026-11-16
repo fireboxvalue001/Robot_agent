@@ -111,7 +111,7 @@ global.fetch = async (resource, options = {}) => {
       return { ok: true, json: async () => ({
         schema_version: "0.2.0", plan_id: "plan_liquid_ai", workflow_id: request.workflow_id,
         status: "logical_pass", issues: [], physical_status: "not_evaluated", execution_allowed: false,
-        knowledge: { source_library_id: "autolab.vd10.meta_operations", source_library_version: "1.9.0" },
+        knowledge: { source_library_id: "autolab.vd10.meta_operations", source_library_version: "1.9.1" },
         generation: { runtime: request.model_mode === "deepseek" ? "deepseek_api" : "deterministic", network_inference: request.model_mode === "deepseek" },
         steps: [{ step_id: "s01", operation_id: "robot.meta.transfer_liquid", operation_version: "1.0.0", name: "容器间定量移液",
           parameters: { source_object_id: "bottle_1", target_object_id: "bottle_2", source_object_name: "瓶子1", target_object_name: "瓶子2", volume_ml: 10 }, depends_on: [] }]
@@ -143,7 +143,7 @@ global.fetch = async (resource, options = {}) => {
         execution_allowed: false,
         knowledge: {
           source_library_id: "autolab.vd10.meta_operations",
-          source_library_version: "1.9.0",
+          source_library_version: "1.9.1",
           sha256: "test"
         },
         steps: operationIds.map((operationId, index) => ({
@@ -589,7 +589,7 @@ setTimeout(async () => {
       experimentName: "VD10检测", steps: [], parameters: {}, timestamp: Date.now(),
       operationChain: {
         contractVersion: "1.0.0", planId: "plan_external",
-        capabilityLibrary: { id: "autolab.vd10.meta_operations", version: "1.9.0", checksum: "sha256:test" },
+        capabilityLibrary: { id: "autolab.vd10.meta_operations", version: "1.9.1", checksum: "sha256:test" },
         operations: [
           {
             stepId: "external_001", sequence: 1, metaOperationId: "robot.meta.aliquot_sample",

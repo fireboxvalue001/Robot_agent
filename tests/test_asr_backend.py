@@ -28,7 +28,7 @@ class AsrBackendTests(unittest.TestCase):
     def test_capability_endpoints_return_versioned_snapshots(self):
         operations = get_meta_operation_capabilities()
         self.assertEqual(operations["libraryId"], "autolab.vd10.meta_operations")
-        self.assertEqual(operations["libraryVersion"], "1.9.0")
+        self.assertEqual(operations["libraryVersion"], "1.9.1")
         self.assertTrue(operations["checksum"].startswith("sha256:"))
         self.assertEqual(len(operations["metaOperations"]), 101)
 

@@ -33,7 +33,7 @@
     "transport_links": 1,
     "building_floors": 3,
     "atomic_vd10_capabilities": 16,
-    "instrument_groups": 11,
+    "instrument_groups": 12,
     "instrument_meta_operations": 28,
     "robot_meta_operations": 68,
     "laboratory_meta_operations": 5,

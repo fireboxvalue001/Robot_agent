@@ -1,7 +1,7 @@
 {
-  "schema_version": "1.9.0",
+  "schema_version": "1.9.1",
   "library_id": "autolab.vd10.meta_operations",
-  "updated_at": "2026-11-04T00:00:00Z",
+  "updated_at": "2026-11-16T00:00:00Z",
   "categories": [
     {
       "id": "instrument",
@@ -76,12 +76,19 @@
     {
       "id": "solvent_remover",
       "name": "溶剂去除设备（待确定方法）",
-      "status": "interface_only"
+      "status": "interface_only",
+      "description": "通用方法接口。皮革油脂抽提的挥发步骤使用同一抽提加热工位，不代表另有一台溶剂去除设备。"
     },
     {
       "id": "extraction_heater",
       "name": "抽提装置加热工位",
       "status": "interface_only"
+    },
+    {
+      "id": "soxhlet",
+      "name": "索氏抽提器",
+      "status": "interface_only",
+      "description": "通过回流与虹吸完成抽提。下列为与本装置相关的机器人操作；加热和供水由各自设备控制。"
     }
   ],
   "preconditions": [
@@ -8114,7 +8121,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "soxhlet"
+        ]
       }
     },
     {
@@ -8302,7 +8312,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "soxhlet"
+        ]
       }
     },
     {
@@ -8393,7 +8406,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "soxhlet"
+        ]
       }
     },
     {
@@ -8660,7 +8676,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "soxhlet"
+        ]
       }
     },
     {
@@ -8755,7 +8774,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "balance"
+        ]
       }
     },
     {
@@ -8865,7 +8887,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "soxhlet"
+        ]
       }
     },
     {
@@ -9405,9 +9430,9 @@
     {
       "id": "balance.meta.tare",
       "version": "1.0.0",
-      "name": "天平去皮",
+      "name": "空容器放上天平后将读数归零",
       "category": "instrument",
-      "description": "仅执行天平去皮这一项动作；定位、搬运、等待和结果判定由流程分别编排。",
+      "description": "空容器已放在秤盘上时，将当前显示归零；再放入样品后，可通过称量读取样品净重。本操作不读取质量。",
       "status": "interface_only",
       "execution_policy": "interface_only",
       "source": {
@@ -9453,7 +9478,7 @@
             "instance_id": "action_01",
             "type": "atomic_node",
             "node_ref": "balance.action.tare",
-            "name": "天平去皮",
+            "name": "空容器放上天平后将读数归零",
             "source_type": "reserved_interface",
             "execution_policy": "interface_only",
             "parameter_bindings": {
@@ -11007,7 +11032,10 @@
       "extensions": {
         "operation_granularity": "single_action",
         "scenario": "leather_fat_extraction",
-        "hardware_binding": "pending"
+        "hardware_binding": "pending",
+        "related_instrument_ids": [
+          "soxhlet"
+        ]
       }
     },
     {

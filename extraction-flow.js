@@ -76,14 +76,23 @@ function renderConfiguredWorkflow(definition) {
 
 function renderConfiguredDiagram(groups, definition) {
   const esc = extractionEscape;
-  const phases = [...groups].filter(([id, nodes]) => nodes.length && !definition.phases?.find(p => p.id === id)?.exception);
+  const configs = new Map((definition.phases || []).map(phase => [phase.id, phase]));
+  const combinedInto = new Map();
+  for (const [id, nodes] of groups) {
+    const other = configs.get(id)?.diagram?.combine_with;
+    if (other && nodes.length && groups.get(other)?.length) combinedInto.set(other, id);
+  }
+  const phases = [...groups].filter(([id, nodes]) => nodes.length && !configs.get(id)?.exception && !combinedInto.has(id));
   let shapes = "", edges = "";
   let y = 25;
   const positions = new Map();
-  for (const [phaseId, nodes] of phases) {
-    const config = definition.phases?.find(item => item.id === phaseId) || {label:"流程步骤"};
-    const phase = config.label;
+  for (const [phaseId, phaseNodes] of phases) {
+    const config = configs.get(phaseId) || {label:"流程步骤"};
     const diagram = config.diagram || {};
+    const combined = combinedInto.get(diagram.combine_with) === phaseId;
+    const nodes = combined ? [...phaseNodes, ...groups.get(diagram.combine_with)] : phaseNodes;
+    const combinedLabel = diagram.combined_label || config.label;
+    const phase = combined ? (definition.task_scope?.mode === "partial" ? combinedLabel.replace(/^\d+\.\s*/, "") : combinedLabel) : config.label;
     const loopNode = nodes.find((node) => node.kind === "loop_check");
     const loop = diagram.shape === "decision" || Boolean(loopNode);
     const missing = nodes.filter((node) => node.status !== "covered").length;
@@ -116,7 +125,7 @@ function renderConfiguredDiagram(groups, definition) {
     if (loop) {
       const limit = definition.parameters[diagram.limit_ref || loopNode?.max_iterations_ref]?.value;
       const repeatLines = diagram.repeat_lines || ["否：返回重试"];
-      edges += `<path d="M210 ${middle} H65 V${y - 14} H410 V${y - 3}" stroke-dasharray="5 4" marker-end="url(#extraction-arrow)"/>${repeatLines.map((line, index) => `<text x="125" y="${middle - 9 + index * 20}">${esc(line)}</text>`).join("")}`;
+      edges += `<path d="M210 ${middle} H65 V${y - 24} H410" stroke="#d2def2" stroke-width="2.3" stroke-dasharray="5 4"/><path d="M410 ${y - 24} V${y - 18}" stroke="#d2def2" stroke-width="2.3"/><polygon class="extraction-loop-arrow" points="402,${y - 18} 418,${y - 18} 410,${y - 2}" fill="#d2def2" stroke="none"/>${repeatLines.map((line, index) => `<text x="125" y="${middle - 9 + index * 20}">${esc(line)}</text>`).join("")}`;
       shapes += `<text x="742" y="${middle - 8}">循环上限：${limit || "待补充"}${limit ? "次" : ""}</text><text x="742" y="${middle + 14}">达到上限 → 停止复核</text>`;
     } else if (missing) shapes += `<text x="740" y="${middle}" fill="#efcf7b">待补信息见阶段详情</text>`;
     y += height + 42;
@@ -124,13 +133,15 @@ function renderConfiguredDiagram(groups, definition) {
   const nodesById = new Map(definition.nodes.map(node => [node.id,node]));
   const phaseEdges = new Map();
   for (const node of definition.nodes) {
-    const from = positions.get(node.phase_id);
+    const fromId = combinedInto.get(node.phase_id) || node.phase_id;
+    const from = positions.get(fromId);
     if (!from) continue;
     for (const [branch,label] of [["next",""],["on_pass","是"],["on_fail","否"],["on_limit","达到上限"],["on_error","异常"],["on_timeout","超时"]]) {
       const target = nodesById.get(node[branch]);
-      const to = target && positions.get(target.phase_id);
-      if (!to || target.phase_id === node.phase_id) continue;
-      const key = `${node.phase_id}:${target.phase_id}`;
+      const toId = target && (combinedInto.get(target.phase_id) || target.phase_id);
+      const to = positions.get(toId);
+      if (!to || toId === fromId) continue;
+      const key = `${fromId}:${toId}`;
       if (!phaseEdges.has(key)) phaseEdges.set(key, {from, to, labels:new Set()});
       if (label) phaseEdges.get(key).labels.add(label);
     }

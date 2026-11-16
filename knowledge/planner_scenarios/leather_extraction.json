@@ -105,7 +105,11 @@
     {
       "id": "disassembly",
       "label": "9. 停热冷却与安全拆卸",
-      "exception": false
+      "exception": false,
+      "diagram": {
+        "combine_with": "solvent_removal",
+        "combined_label": "9. 停热拆卸与二氯甲烷去除"
+      }
     },
     {
       "id": "solvent_removal",
@@ -3102,7 +3106,7 @@
         "sample_drying_previous_g": "sample_drying_current.mass_g"
       },
       "counter_id": "sample_drying_cycles",
-      "on_pass": "sample_tare_container_pick",
+      "on_pass": "sample_weighing_setup",
       "phase_id": "sample_drying",
       "display": {
         "notice": "相邻两次质量差≤阈值（本实验不超过5 mg）才通过；否则更新基准并复烘、冷却、称量，达到上限停止复核。",
@@ -3112,112 +3116,15 @@
       }
     },
     {
-      "id": "sample_tare_container_pick",
-      "label": "抓取抽提试样容器",
-      "kind": "action",
+      "id": "sample_weighing_setup",
+      "label": "确认干样称量方式与天平状态",
+      "kind": "guard",
       "requires": [],
-      "outputs": [
-        "grasp_verified",
-        "operation_log"
-      ],
-      "operation_id": "robot.meta.envelop_grasp",
-      "next": "sample_tare_container_move",
+      "check": "confirmed_dry_sample_weighing_setup",
       "on_error": "review",
-      "input_bindings": {
-        "object_id": {
-          "object_ref": "sample_tare_container_pick.object_id"
-        },
-        "control_profile_id": {
-          "resource_ref": "soxhlet.control_profile_id"
-        }
-      },
-      "phase_id": "sample",
-      "display": {
-        "title": "抓取抽提试样容器"
-      }
-    },
-    {
-      "id": "sample_tare_container_move",
-      "label": "将抽提试样容器移至天平",
-      "kind": "action",
-      "requires": [],
-      "outputs": [
-        "motion_completed",
-        "operation_log"
-      ],
-      "operation_id": "robot.meta.move_grasped_object",
-      "next": "sample_tare_container_release",
-      "on_error": "review",
-      "input_bindings": {
-        "object_id": {
-          "object_ref": "sample_tare_container_move.object_id"
-        },
-        "target_location_id": {
-          "object_ref": "sample_tare_container_move.target_location_id"
-        },
-        "control_profile_id": {
-          "resource_ref": "soxhlet.control_profile_id"
-        }
-      },
-      "phase_id": "sample",
-      "display": {
-        "title": "将抽提试样容器移至天平"
-      }
-    },
-    {
-      "id": "sample_tare_container_release",
-      "label": "放置抽提试样容器",
-      "kind": "action",
-      "requires": [],
-      "outputs": [
-        "release_verified",
-        "operation_log"
-      ],
-      "operation_id": "robot.meta.release_object",
-      "next": "sample_tare",
-      "on_error": "review",
-      "input_bindings": {
-        "object_id": {
-          "object_ref": "sample_tare_container_release.object_id"
-        },
-        "target_location_id": {
-          "object_ref": "sample_tare_container_release.target_location_id"
-        },
-        "purpose": {
-          "object_ref": "sample_tare_container_release.purpose"
-        },
-        "control_profile_id": {
-          "resource_ref": "soxhlet.control_profile_id"
-        }
-      },
-      "phase_id": "sample",
-      "display": {
-        "title": "放置抽提试样容器"
-      }
-    },
-    {
-      "id": "sample_tare",
-      "label": "抽提试样容器置于天平后去皮",
-      "kind": "action",
-      "requires": [],
-      "outputs": [
-        "tare_completed"
-      ],
-      "operation_id": "balance.meta.tare",
       "next": "target_sample",
-      "on_error": "review",
-      "input_bindings": {
-        "device_id": {
-          "resource_ref": "balance.device_id"
-        },
-        "control_profile_id": {
-          "resource_ref": "balance.control_profile_id"
-        }
-      },
       "phase_id": "sample",
-      "display": {
-        "title": "抽提试样容器置于天平后去皮"
-      }
+      "display": {}
     },
     {
       "id": "target_sample",
@@ -3250,14 +3157,14 @@
     },
     {
       "id": "sample_mass",
-      "label": "记录实际投入抽提的干样净质量md",
+      "label": "读取装筒前的干样称量值",
       "kind": "action",
       "requires": [],
       "outputs": [
         "mass_g",
         "stable"
       ],
-      "guard": "stable_and_net_mass",
+      "guard": "stable",
       "operation_id": "robot.meta.read_balance_mass",
       "next": "cotton_bottom",
       "on_error": "review",
@@ -3274,7 +3181,7 @@
       },
       "phase_id": "sample",
       "display": {
-        "title": "记录实际投入抽提的干样净质量md"
+        "title": "读取装筒前的干样称量值"
       }
     },
     {
@@ -3343,7 +3250,7 @@
         "cotton_placed"
       ],
       "operation_id": "robot.meta.place_cotton",
-      "next": "rinse_empty",
+      "next": "sample_loaded_mass",
       "on_error": "review",
       "input_bindings": {
         "cotton_id": {
@@ -3362,6 +3269,26 @@
       "phase_id": "sample",
       "display": {
         "title": "放置滤纸筒上部脱脂棉"
+      }
+    },
+    {
+      "id": "sample_loaded_mass",
+      "label": "核实实际装入滤纸筒的干样净质量 md",
+      "kind": "guard",
+      "requires": [],
+      "check": "verified_loaded_dry_sample_mass",
+      "data_refs": [
+        "sample_mass.mass_g",
+        "sample_thimble.sample_loaded"
+      ],
+      "outputs": [
+        "mass_g"
+      ],
+      "on_error": "review",
+      "next": "rinse_empty",
+      "phase_id": "sample",
+      "display": {
+        "notice": "按现场确认的称量及转移核对方式确认同一试样的实际装入净质量；未确认不得将装筒前读数用作 md。"
       }
     },
     {
@@ -5621,7 +5548,7 @@
     },
     {
       "id": "remove_solvent",
-      "label": "按已审核实际挥发程序去除二氯甲烷",
+      "label": "在同一抽提加热工位启动已审核的挥发程序",
       "kind": "action",
       "requires": [],
       "outputs": [
@@ -5643,7 +5570,7 @@
       },
       "phase_id": "solvent_removal",
       "display": {
-        "title": "按已审核实际挥发程序去除二氯甲烷"
+        "title": "在同一抽提加热工位启动已审核的挥发程序"
       },
       "method_requirement": "solvent_removal_method"
     },
@@ -5668,7 +5595,7 @@
     },
     {
       "id": "solvent_stop",
-      "label": "停止溶剂去除程序",
+      "label": "停止同一抽提加热工位的挥发加热",
       "kind": "action",
       "requires": [],
       "outputs": [
@@ -5687,7 +5614,7 @@
       },
       "phase_id": "solvent_removal",
       "display": {
-        "title": "停止溶剂去除程序"
+        "title": "停止同一抽提加热工位的挥发加热"
       }
     },
     {
@@ -6786,7 +6713,7 @@
       "data_refs": [
         "empty_check.constant_mass_g",
         "final_check.constant_mass_g",
-        "sample_mass.mass_g"
+        "sample_loaded_mass.mass_g"
       ],
       "outputs": [
         "extract_mass_g",

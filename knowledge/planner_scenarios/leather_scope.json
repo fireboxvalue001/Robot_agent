@@ -17,11 +17,11 @@
     {"id":"solvent_removal","label":"挥发除溶剂","phases":["solvent_removal"],"aliases":["挥发去除","挥发除去二氯甲烷","溶剂去除"],"condition":"抽提完成且已安全分离，萃取液保留于对应抽提瓶；实际方法、原工位与通风须审核","safety_nodes":["ventilation"]},
     {"id":"final","label":"抽提后恒重","phases":["final"],"aliases":["抽提后恒重","最后恒重","最终恒重","抽提物恒重","萃取物恒重"],"condition":"实际溶剂去除和独立残留检查已完成，已确认允许进入烘箱；瓶体及萃取物身份已核对","safety_nodes":["ventilation"]},
     {"id":"result","label":"含量计算","phases":["result"],"aliases":["含量计算","计算含量","计算结果","干基计算"],"condition":"提供同一份试样的真实m0、m1及实际投入干样质量md，来源与单位已核对，不重复水分校正"},
-    {"id":"weigh_once","label":"样品称量读数","nodes":["sample_mass"],"aliases":["样品称量读数","只称量一次","只读一次天平","仅称量一次"],"condition":"样品已置于已去皮的天平，读数稳定且能读取试样净质量"}
+    {"id":"weigh_once","label":"样品称量读数","nodes":["sample_mass"],"aliases":["样品称量读数","只称量一次","只读一次天平","仅称量一次"],"condition":"样品已放在天平上，称量方式已确认且读数稳定；单次读数不等同于实际装入量"}
   ],
   "external_values": {
     "empty_check.constant_mass_g":{"label":"空抽提瓶恒重质量m0","type":"number","unit":"g","minimum":0},
     "final_check.constant_mass_g":{"label":"抽提瓶及萃取物恒重总质量m1","type":"number","unit":"g","minimum":0},
-    "sample_mass.mass_g":{"label":"实际投入抽提的干样质量md","type":"number","unit":"g","minimum":0.000001}
+    "sample_loaded_mass.mass_g":{"label":"实际投入抽提的干样质量md","type":"number","unit":"g","minimum":0.000001}
   }
 }

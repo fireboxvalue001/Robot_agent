@@ -6,7 +6,7 @@
 
 ## 必交文件
 
-1. `data/meta-operations.json`：唯一能力库源文件，当前为 `1.9.0`，包含101个兼容条目：63个单节点条目、38个历史组合条目。此次增加8个实际抽提单步接口（碎屑收集、固体混匀、平铺、瓶盖放置、液位读取及加热工位设置/启动/停止）；回流监测升至1.2.0，区分阶段虹吸与当前试样加热后的有效循环。均不代表设备已接入，见 `docs/LEATHER_EXTRACTION.md`。屏幕场景仍复用原能力，见 `docs/VD10_SCREEN.md`。交接方需重新读取库版本、摘要和操作版本，不沿用旧缓存。
+1. `data/meta-operations.json`：唯一能力库源文件，当前为 `1.9.1`，包含101个兼容条目：63个单节点条目、38个历史组合条目。此次增加8个实际抽提单步接口（碎屑收集、固体混匀、平铺、瓶盖放置、液位读取及加热工位设置/启动/停止）；回流监测升至1.2.0，区分阶段虹吸与当前试样加热后的有效循环。均不代表设备已接入，见 `docs/LEATHER_EXTRACTION.md`。屏幕场景仍复用原能力，见 `docs/VD10_SCREEN.md`。交接方需重新读取库版本、摘要和操作版本，不沿用旧缓存。
 2. `schemas/meta-operation-library.schema.json`：能力库格式校验规则。
 3. `data/spatial-locations.json`：位置、楼层和电梯运输链路。
 4. `schemas/spatial-location-library.schema.json`：空间数据格式校验规则。

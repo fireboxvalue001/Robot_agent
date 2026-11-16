@@ -121,6 +121,7 @@ function loadMetaOperationLibrary(library) {
     name: operation.name,
     category: operation.category,
     instrument_id: operation.instrument_id || null,
+    related_instrument_ids: operation.extensions?.related_instrument_ids || [],
     description: operation.description,
     status: operation.status,
     inputs: operation.inputs || {},
@@ -1121,23 +1122,29 @@ function generateWorkflowLocally() {
 function renderLibrary() {
   if (!metaOperations.length) return;
   const query = $("library-search").value.trim().toLowerCase();
+  const matches = (operation) => {
+    const devices = instrumentDefinitions.filter(instrument =>
+      instrument.id === operation.instrument_id || operation.related_instrument_ids.includes(instrument.id));
+    const text = [operation.name, operation.meta_operation_id, operation.description, ...operation.aliases,
+      ...operation.supported_objects, ...operation.control_requirements, ...devices.map(device => device.name)];
+    return !query || text.join(" ").toLowerCase().includes(query);
+  };
+  const relatedItems = metaOperations.filter(operation => operation.category !== "instrument" &&
+    operation.related_instrument_ids.length && matches(operation));
   const categorySections = Object.entries(CATEGORY_INFO).map(([category, info]) => {
-    const items = metaOperations.filter((operation) => {
-      const text = `${operation.name} ${operation.meta_operation_id} ${operation.description} ${operation.aliases.join(" ")} ${operation.supported_objects.join(" ")} ${operation.control_requirements.join(" ")}`.toLowerCase();
-      return operation.category === category && (!query || text.includes(query));
-    }).sort((left, right) => {
+    const items = metaOperations.filter(operation => operation.category === category && matches(operation)).sort((left, right) => {
       if (left.is_legacy_composite !== right.is_legacy_composite) return left.is_legacy_composite ? 1 : -1;
       const leftPriority = FOUNDATION_OPERATION_IDS.has(left.meta_operation_id) ? 0 : 1;
       const rightPriority = FOUNDATION_OPERATION_IDS.has(right.meta_operation_id) ? 0 : 1;
       return leftPriority - rightPriority;
     });
-    if (!items.length) return "";
+    if (!items.length && !(category === "instrument" && relatedItems.length)) return "";
     const content = category === "instrument"
-      ? renderInstrumentGroups(items, Boolean(query))
+      ? renderInstrumentGroups(items, Boolean(query), relatedItems)
       : `<ul class="op-list">${items.map(renderMetaOperation).join("")}</ul>`;
     return `
       <details class="op-group ${info.className}" ${query ? "open" : ""}>
-        <summary class="op-group-title"><span>${info.title}</span><span>${items.length} 项</span></summary>
+        <summary class="op-group-title"><span>${info.title}</span><span>${items.length + (category === "instrument" ? relatedItems.length : 0)} 项</span></summary>
         ${content}
       </details>`;
   }).join("");
@@ -1151,7 +1158,7 @@ function renderLibrary() {
   });
 }
 
-function renderInstrumentGroups(items, expandMatches) {
+function renderInstrumentGroups(items, expandMatches, relatedItems = []) {
   const knownInstrumentIds = new Set(instrumentDefinitions.map((instrument) => instrument.id));
   const groups = [...instrumentDefinitions];
   if (items.some((operation) => !knownInstrumentIds.has(operation.instrument_id))) {
@@ -1162,12 +1169,13 @@ function renderInstrumentGroups(items, expandMatches) {
       operation.instrument_id === instrument.id ||
       (instrument.id === "unassigned" && !knownInstrumentIds.has(operation.instrument_id))
     );
-    if (!operations.length) return "";
+    const related = relatedItems.filter(operation => operation.related_instrument_ids.includes(instrument.id));
+    if (!operations.length && !related.length) return "";
     return `
       <details class="instrument-group" ${expandMatches ? "open" : ""}>
-        <summary><span>${escapeHtml(instrument.name)}</span><span>${operations.length} 项</span></summary>
+        <summary><span>${escapeHtml(instrument.name)}</span><span>${operations.length ? `${operations.length} 项` : ""}${related.length ? `${operations.length ? " + " : ""}${related.length} 项关联` : ""}</span></summary>
         ${instrument.description ? `<p>${escapeHtml(instrument.description)}</p>` : ""}
-        <ul class="op-list">${operations.map(renderMetaOperation).join("")}</ul>
+        <ul class="op-list">${[...operations, ...related].map(renderMetaOperation).join("")}</ul>
       </details>`;
   }).join("")}</div>`;
 }
@@ -1925,7 +1933,7 @@ function renderCotDiagram(trace, goals, decisionLabels) {
       const problem = box(540, check.centerY - 26, 218, needsInput ? "需要补充信息" : goal.status === "scenario_blocked" ? "当前流程暂不支持" : "暂时无法完成", traceUserText(goal.reason || goal.description, trace), needsInput ? "warning" : "blocked");
       links.push(edge(center + 110, check.centerY, 538, check.centerY, "否", needsInput ? "#eacb65" : "#ef7b89"));
       cursor = Math.max(check.bottom, problem.bottom) + 64;
-      links.push(`<path d="M${problem.centerX} ${problem.bottom} V${cursor - 28} H${center} V${cursor - 2}" fill="none" stroke="#8fa3c4" stroke-width="1.7" stroke-dasharray="5 4" marker-end="url(#cot-arrow)"/><text x="${(problem.centerX + center) / 2}" y="${cursor - 34}" class="cot-edge-label">记录问题，继续检查</text>`);
+      links.push(`<path d="M${problem.centerX} ${problem.bottom} V${cursor - 28} H${center} V${cursor - 13}" fill="none" stroke="#8fa3c4" stroke-width="1.7" stroke-dasharray="5 4"/><polygon class="cot-continue-arrow" points="${center - 5},${cursor - 13} ${center + 5},${cursor - 13} ${center},${cursor - 2}" fill="#8fa3c4"/><text x="${(problem.centerX + center) / 2}" y="${cursor - 34}" class="cot-edge-label">记录问题，继续检查</text>`);
     }
   }
   const mappings = trace.mappings || [];

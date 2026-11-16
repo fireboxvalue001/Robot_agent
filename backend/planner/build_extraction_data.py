@@ -13,7 +13,7 @@ def write(path, value):
 def build():
     library = json.loads((ROOT / "data/meta-operations.json").read_text(encoding="utf-8"))
     instruments = {"balance": "分析天平", "drying_oven": "烘箱", "water_bath": "水浴设备", "extraction_heater": "抽提装置加热工位",
-                   "condenser": "冷凝水装置", "solvent_remover": "溶剂去除设备（待确定方法）"}
+                   "condenser": "冷凝水装置", "solvent_remover": "溶剂去除设备（待确定方法）", "soxhlet": "索氏抽提器"}
     for key, name in instruments.items():
         if key not in {item["id"] for item in library["instruments"]}:
             library["instruments"].append({"id": key, "name": name, "status": "interface_only"})
@@ -42,7 +42,7 @@ def build():
         ("extraction_heater.meta.set_temperature", "设置抽提工位加热条件", "extraction_heater", ["device_id", "temperature_c"], ["temperature_set"]),
         ("extraction_heater.meta.start", "启动抽提工位加热", "extraction_heater", ["device_id"], ["running"]),
         ("extraction_heater.meta.stop", "停止抽提工位加热", "extraction_heater", ["device_id"], ["stopped"]),
-        ("balance.meta.tare", "天平去皮", "balance", ["device_id"], ["tare_completed"]),
+        ("balance.meta.tare", "空容器放上天平后将读数归零", "balance", ["device_id"], ["tare_completed"]),
         ("drying_oven.meta.set_temperature", "设置烘箱温度", "drying_oven", ["device_id", "temperature_c"], ["temperature_set"]),
         ("drying_oven.meta.start", "启动烘箱", "drying_oven", ["device_id"], ["running"]),
         ("drying_oven.meta.stop", "停止烘箱加热", "drying_oven", ["device_id"], ["stopped"]),
@@ -100,7 +100,26 @@ def build():
     for op in library["meta_operations"]:
         if op["id"] in {entry[0] for entry in actions[16:24]}:
             op["source"]["reference"] = "油脂抽提实验步骤(第一次修订).docx"
-    library.update(schema_version="1.9.0", updated_at="2026-11-04T00:00:00Z")
+    next(item for item in library["instruments"] if item["id"] == "soxhlet")["description"] = (
+        "通过回流与虹吸完成抽提。下列为与本装置相关的机器人操作；加热和供水由各自设备控制。"
+    )
+    next(item for item in library["instruments"] if item["id"] == "solvent_remover")["description"] = (
+        "通用方法接口。皮革油脂抽提的挥发步骤使用同一抽提加热工位，不代表另有一台溶剂去除设备。"
+    )
+    related = {
+        "soxhlet": {"insert_extraction_sample", "connect_glass_joint", "disconnect_glass_joint",
+                    "inspect_extraction_assembly", "inspect_liquid_level", "monitor_reflux"},
+        "balance": {"read_balance_mass"},
+    }
+    for op in library["meta_operations"]:
+        for instrument, names in related.items():
+            if op["id"] in {f"robot.meta.{name}" for name in names}:
+                op.setdefault("extensions", {})["related_instrument_ids"] = [instrument]
+        if op["id"] == "balance.meta.tare":
+            op["name"] = "空容器放上天平后将读数归零"
+            op["description"] = "空容器已放在秤盘上时，将当前显示归零；再放入样品后，可通过称量读取样品净重。本操作不读取质量。"
+            op["operation_tree"]["children"][0]["name"] = op["name"]
+    library.update(schema_version="1.9.1", updated_at="2026-11-16T00:00:00Z")
     write("data/meta-operations.json", library)
     templates = json.loads((ROOT / "data/robot-action-templates.json").read_text(encoding="utf-8"))
     templates["library_version"] = library["schema_version"]
@@ -225,14 +244,17 @@ def build():
     action("dry_sample_load", "robot.meta.transfer_solid_piece", "将混匀皮样放入已恒重称量瓶")
     action("dry_sample_spread", "robot.meta.spread_solid_sample", "平铺皮样，避免堆积过厚")
     sample_drying = constant("sample_drying", "称量瓶及皮样", "sample_threshold_mg", "sample_dry_temperature_c", "sample_dry_minutes", "sample_repeat_dry_minutes", lid=True)
-    sample_drying["on_pass"] = "sample_tare_container_pick"
-    transfer("sample_tare_container", "抽提试样容器", "天平")
-    action("sample_tare", "balance.meta.tare", "抽提试样容器置于天平后去皮")
+    sample_drying["on_pass"] = "sample_weighing_setup"
+    add("sample_weighing_setup", "确认干样称量方式与天平状态", kind="guard",
+        check="confirmed_dry_sample_weighing_setup", on_error="review")
     action("target_sample", "robot.meta.transfer_solid_piece", "选取已恒重干样（目标质量不代替实测）", ["sample_target_g"])
-    action("sample_mass", "robot.meta.read_balance_mass", "记录实际投入抽提的干样净质量md", guard="stable_and_net_mass")
+    action("sample_mass", "robot.meta.read_balance_mass", "读取装筒前的干样称量值", guard="stable")
     action("cotton_bottom", "robot.meta.place_cotton", "放置滤纸筒底部脱脂棉")
     action("sample_thimble", "robot.meta.insert_extraction_sample")
     action("cotton_top", "robot.meta.place_cotton", "放置滤纸筒上部脱脂棉")
+    add("sample_loaded_mass", "核实实际装入滤纸筒的干样净质量 md", kind="guard",
+        check="verified_loaded_dry_sample_mass", data_refs=["sample_mass.mass_g", "sample_thimble.sample_loaded"],
+        outputs=["mass_g"], on_error="review")
     action("rinse_empty", "robot.meta.rinse_vessel", "清洗空抽提瓶")
     empty = constant("empty", "空抽提瓶", "empty_threshold_mg", "empty_dry_temperature_c", "empty_initial_dry_minutes", "empty_repeat_dry_minutes", cool=None, repeat_cool=None)
     empty["on_pass"] = "thimble_pick"
@@ -280,19 +302,19 @@ def build():
     action("evaporation_ventilation", "lab.meta.verify_ventilation", "核验实际挥发去除工位通风状态", guard="ventilation_ok", on_error="review")
     add("evaporation_method_gate", "实际挥发方法及原工位适用性已审核吗？", kind="guard", check="approved_evaporation_method_and_hardware", method_requirement="solvent_removal_method", on_error="review")
     action("evaporation_set", "extraction_heater.meta.set_temperature", "设置经审核的挥发去除加热条件", ["evaporation_temperature_c"])
-    action("remove_solvent", "solvent_remover.meta.start", "按已审核实际挥发程序去除二氯甲烷")
+    action("remove_solvent", "solvent_remover.meta.start", "在同一抽提加热工位启动已审核的挥发程序")
     add("solvent_wait", "是否无可见游离溶剂且无暴沸、飞溅？", kind="guard", requires=["solvent_timeout_minutes"],
         check="no_visible_free_solvent_and_no_bumping_or_loss", endpoint_role="operational_evaporation_endpoint_only",
         monitoring_guard="ventilation_and_heater_feedback_ok", confirmation="verified_observation_or_operator_confirmation",
         on_error="solvent_safe_stop", on_timeout="solvent_safe_stop")
-    action("solvent_stop", "solvent_remover.meta.stop")
+    action("solvent_stop", "solvent_remover.meta.stop", "停止同一抽提加热工位的挥发加热")
     add("evaporation_stopped_guard", "实际挥发程序停止加热已确认吗？", kind="guard", data_refs=["solvent_stop.stopped"], check="verified_evaporation_heater_stopped", requires=["cool_timeout_minutes"], on_timeout="review")
     add("evaporation_cool", "等待抽提瓶满足后续安全取放条件", kind="guard", requires=["cool_timeout_minutes"], check="approved_evaporation_cooling_profile", on_timeout="review")
     action("residue_check", "robot.meta.check_solvent_residue", guard="residue_check_passed", on_error="review")
     final = constant("final", "抽提瓶及萃取物", "final_threshold_mg", "residue_dry_temperature_c", "residue_dry_minutes", "residue_repeat_dry_minutes", repeat_cool="residue_repeat_cool_minutes")
     final["on_pass"] = "content"
     add("content", "按实际干样质量计算二氯甲烷萃取物含量", kind="compute", formula="extractable_content_from_dry_sample",
-        data_refs=["empty_check.constant_mass_g", "final_check.constant_mass_g", "sample_mass.mass_g"],
+        data_refs=["empty_check.constant_mass_g", "final_check.constant_mass_g", "sample_loaded_mass.mass_g"],
         outputs=["extract_mass_g", "sample_dry_mass_g", "extractable_content_percent_dry_basis"])
     add("complete", "逻辑流程结束（尚未执行）", kind="end")
     action("safe_stop", "extraction_heater.meta.stop", "异常时停止对应抽提工位加热", next="review")
@@ -336,7 +358,7 @@ def build():
         ("weighing", "1. 称量瓶及瓶盖恒重", r"^(rinse_weighing|weighing_)"),
         ("preparation", "2. 皮革剪碎与混匀", r"^(cut|collect_fragments|mix_solid|trial_identity)"),
         ("sample_drying", "3. 皮革样品干燥与恒重", r"^(dry_sample|sample_drying)"),
-        ("sample", "4. 干样称量与滤纸筒装填", r"^(sample_tare|target_sample|sample_mass|cotton_|sample_thimble)"),
+        ("sample", "4. 干样称量与滤纸筒装填", r"^(sample_weighing_setup|target_sample|sample_mass|cotton_|sample_thimble|sample_loaded_mass)"),
         ("empty", "5. 空抽提瓶恒重", r"^(rinse_empty|empty_)"),
         ("assembly", "6. 抽提室加液与装置安装", r"^(solvent_aspirate|solvent_dispense|dose_|initial_level|siphon_height|dosing_siphon|topup_|half_level|heater_station|thimble|joint_lower$|joint_upper$|clamp$|inspect_assembly)"),
         ("startup", "7. 冷凝检查与抽提启动", r"^(water_on|flow$|startup_check|bath_set|bath_start)"),
@@ -359,6 +381,8 @@ def build():
             node["display"]["notice"] = "仅累计本试样及工位加热后的有效完整循环，排除加液虹吸；达到最低次数才可结束。时长仅用于超时保护，不推算次数或累加其他工位。"
         if node.get("endpoint_role"):
             node["display"]["notice"] = "无可见游离溶剂仅是挥发阶段结束参考，不证明无残留或满足烘箱准入；后续状态需独立确认。"
+        if node["id"] == "sample_loaded_mass":
+            node["display"]["notice"] = "按现场确认的称量及转移核对方式确认同一试样的实际装入净质量；未确认不得将装筒前读数用作 md。"
         if node["id"] == "remove_solvent":
             node["method_requirement"] = "solvent_removal_method"
         if node.get("operation_id"):
@@ -371,6 +395,8 @@ def build():
             phase["diagram"] = {"subtitle": "各工位≥{{minimum_reflux_cycles}}次；加液虹吸不计数"}
         elif phase["id"] == "preparation":
             phase["diagram"] = {"subtitle": "切块边长{{cut_size_cm}} cm；每样两份独立平行样"}
+        elif phase["id"] == "disassembly":
+            phase["diagram"] = {"combine_with": "solvent_removal", "combined_label": "9. 停热拆卸与二氯甲烷去除"}
     write("knowledge/planner_scenarios/leather_extraction.json", {
         "knowledge_id": "autolab.planner.leather_fat_extraction", "version": "0.4.0", "scenario_id": "leather_fat_extraction",
         "review_status": "draft", "source": "油脂抽提实验步骤(第一次修订).docx及用户2026-11-04确认的实际挥发流程；参照QB/T 2718—2018，未逐条核验标准全文",

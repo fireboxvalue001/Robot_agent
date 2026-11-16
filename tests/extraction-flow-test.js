@@ -12,6 +12,14 @@ const resources = JSON.parse(fs.readFileSync(path.join(root, "data/leather-extra
 const workflow = {name:scenario.name, phases:scenario.phases, nodes: scenario.nodes.map(node => ({...node, status: node.requires.length ? "needs_input" : "covered", reason: "定义已匹配，尚未执行"})), parameters: {}, resources: resources.resources};
 const result = context.renderExtractionWorkflow(workflow);
 assert(result.includes('<svg viewBox='));
+const svg = result.match(/<svg[\s\S]*?<\/svg>/)[0];
+assert(svg.includes("9. 停热拆卸与二氯甲烷去除"));
+assert(!svg.includes("挥发除溶剂与后续准入检查"));
+assert(svg.includes('data-phase-edge="disassembly:final"'));
+assert(result.includes("挥发除溶剂与后续准入检查"), "Detailed phases must remain separately inspectable");
+const removalOnly = context.renderExtractionWorkflow({...workflow,
+  nodes: workflow.nodes.filter(node => node.phase_id === "solvent_removal")});
+assert(removalOnly.match(/<svg[\s\S]*?<\/svg>/)[0].includes("挥发除溶剂与后续准入检查"));
 assert(result.includes("称量瓶及瓶盖恒重"));
 assert(result.includes("空抽提瓶恒重"));
 assert(result.includes("萃取物干燥与恒重"));
@@ -22,6 +30,8 @@ assert(!result.includes("蒸馏冷凝回收") && !result.includes("水分比例"
 assert(result.includes("各工位≥待确认次；加液虹吸不计数"));
 assert(result.includes("达到上限 → 停止复核"));
 assert(result.includes("否：再次干燥"));
+assert(!svg.includes('class="extraction-loop-direction"'), "Loop arrows belong at the end only");
+assert.strictEqual((svg.match(/class="extraction-loop-arrow"/g) || []).length, 4);
 assert(result.includes("数据") && result.includes("尚未执行"));
 assert(!result.includes("元操作") && !result.includes("C2"));
 const compact = context.renderConfiguredWorkflow({...workflow,

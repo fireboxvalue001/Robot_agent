@@ -16,9 +16,9 @@ const statuses = new Set(["draft", "pending_verification", "verified", "interfac
 const ids = new Set();
 const preconditionIds = new Set(library.preconditions.map((item) => item.id));
 
-assert(library.schema_version === "1.9.0", "unexpected schema version");
+assert(library.schema_version === "1.9.1", "unexpected schema version");
 assert(library.categories.length === 3, "the library must declare exactly three categories");
-assert(library.instruments.length === 11, "the library must declare its instrument groups");
+assert(library.instruments.length === 12, "the library must declare its instrument groups");
 assert(library.meta_operations.length === 101, "the catalog should contain 101 entries including legacy composites");
 assert(library.meta_operations.filter((item) => item.category === "instrument").length === 28, "instrument catalog should contain 28 operations");
 assert(library.meta_operations.filter((item) => item.category === "robot").length === 68, "robot catalog should contain 68 entries including legacy composites");
@@ -27,6 +27,9 @@ assert(library.meta_operations.filter((item) => item.category === "lab").length 
 const instrumentIds = new Set(library.instruments.map((item) => item.id));
 assert(instrumentIds.has("vd10"), "VD10 instrument group is missing");
 assert(instrumentIds.has("generic"), "generic instrument group is missing");
+assert(instrumentIds.has("soxhlet"), "Soxhlet instrument group is missing");
+const soxhletOperations = library.meta_operations.filter(op => op.extensions?.related_instrument_ids?.includes("soxhlet"));
+assert(soxhletOperations.length === 6 && soxhletOperations.every(op => op.category === "robot"), "Soxhlet references must retain their robot ownership");
 for (const instrumentId of ["viscometer", "particle_counter", "ftir"]) {
   assert(instrumentIds.has(instrumentId), `new instrument group is missing: ${instrumentId}`);
   const operations = library.meta_operations.filter((item) => item.instrument_id === instrumentId);

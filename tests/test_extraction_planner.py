@@ -240,7 +240,12 @@ class ExtractionPlannerTests(unittest.TestCase):
         nodes = {n["id"]: n for n in self.scenario["nodes"]}
         self.assertEqual(nodes["weighing_check"]["on_pass"], "cut")
         self.assertEqual(nodes["cut_size_check"]["on_pass"], "collect_fragments")
-        self.assertEqual(nodes["sample_drying_check"]["on_pass"], "sample_tare_container_pick")
+        self.assertEqual(nodes["sample_drying_check"]["on_pass"], "sample_weighing_setup")
+        self.assertNotIn("sample_tare", nodes)
+        self.assertEqual(nodes["cotton_top"]["next"], "sample_loaded_mass")
+        self.assertEqual(nodes["sample_loaded_mass"]["on_error"], "review")
+        self.assertIn("sample_loaded_mass.mass_g", nodes["content"]["data_refs"])
+        self.assertNotIn("sample_mass.mass_g", nodes["content"]["data_refs"])
         self.assertEqual(nodes["empty_check"]["on_pass"], "thimble_pick")
         self.assertEqual(nodes["joint_lower"]["next"], "dose_capacity_guard")
         self.assertEqual(nodes["content"]["formula"], "extractable_content_from_dry_sample")

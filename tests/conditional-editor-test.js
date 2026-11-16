@@ -17,6 +17,17 @@ const context = vm.createContext({ document: { getElementById: get, querySelecto
 vm.runInContext(fs.readFileSync(path.join(root, "operation-display.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "app.js"), "utf8").replace(/initialize\(\);\s*$/, ""), context);
 vm.runInContext("loadMetaOperationLibrary(library); renderAll = () => {}; showToast = () => {};", context);
+context.renderLibrary();
+assert.match(get("operation-library").innerHTML, /检测仪器元操作<\/span><span>35 项<\/span>/);
+get("library-search").value = "索氏抽提器";
+context.renderLibrary();
+assert.match(get("operation-library").innerHTML, /索氏抽提器<\/span><span>6 项关联/);
+assert.match(get("operation-library").innerHTML, /data-id="robot.meta.monitor_reflux"/);
+get("library-search").value = "分析天平";
+context.renderLibrary();
+assert.match(get("operation-library").innerHTML, /空容器放上天平后将读数归零/);
+assert.match(get("operation-library").innerHTML, /data-id="robot.meta.read_balance_mass"/);
+get("library-search").value = "";
 const definition = { ...scene, parameters: {}, nodes: scene.nodes.map(node => ({ ...node,
   status: "covered", reason: "尚未执行", arguments: node.input_bindings || {},
   ...(node.operation_id ? { operation_version: byId.get(node.operation_id).version } : {}) })) };
