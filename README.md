@@ -2,7 +2,7 @@
 
 版本：`0.3.0`
 
-这是用于验证 VD10 实验任务规划的本地可视化界面，现已接入腾讯云一句话识别、意图预处理、外部任务编排和物理可执行确认接口。当前不连接真实 VD10 或机械臂。
+这是实验任务编排的本地可视化界面，支持 VD10、皮革油脂抽提、样品定时静置等已登记场景。已接入腾讯云实时语音识别与句词时间戳、自然语言和委托单输入、AI智能编排、配置化流程图、待补参数及草案默认值填入，并保留 MQTT 外部编排和物理可执行确认接口。当前不连接真实 VD10 或机械臂，编排通过不代表可以直接执行设备。
 
 ## 首次配置
 
@@ -23,6 +23,16 @@ TENCENT_ASR_ENGINE=16k_zh
 TENCENT_ASR_WORD_INFO=1
 TENCENT_ASR_VAD_SILENCE_TIME=800
 ```
+
+默认使用“AI智能编排”，需要在同一文件中配置自己的 DeepSeek 密钥：
+
+```text
+DEEPSEEK_API_KEY=你的API密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+不使用云端模型时可选择“本地规则编排（离线）”。AI请求失败不会冒充AI成功或自动切换为离线结果；不要提交或分享真实密钥。
 
 MQTT 默认使用上游示例 Broker。需要覆盖连接参数时，在同一个 `backend/.env` 中填写：
 
@@ -55,6 +65,7 @@ MQTT_HISTORY_DIR=
 - `backend/.env`
 - `backend/__pycache__/`、`tests/__pycache__/`
 - `data/mqtt_history/*.jsonl`
+- `data/execution_history/` 等运行数据库与本地档案（确需迁移时另行备份并检查敏感数据）
 
 接收方解压后运行 `setup-asr.bat`，再复制 `backend/.env.example` 为 `backend/.env`，填写自己的腾讯云和 MQTT 配置，最后运行 `start-demo.bat`。
 
@@ -69,6 +80,8 @@ MQTT_HISTORY_DIR=
 浏览器打开：<http://127.0.0.1:8877>
 
 不要再使用 `python -m http.server`，静态服务器无法提供 ASR 接口。
+
+`start-demo.bat` 还启用了仅限直连本机的说明书导入管理入口，并关闭代理头信任；上述手动 uvicorn 命令不会自动启用该免令牌模式。不要把本机免令牌入口通过反向代理或端口转发公开，远程部署应按[说明书导入说明](docs/MANUAL_IMPORT.md)配置管理员令牌及受保护入口。
 
 ## 语音输入
 
@@ -110,7 +123,35 @@ C1 的“导入解析结果 JSON”读取同事输出的单个 `add_to` 结果�
 
 界面提供“本地规则编排（离线）”和“AI智能编排”两个入口。本地入口合并关键词匹配与确定性场景模板，不调用云端AI；AI模式使用受限场景知识生成候选计划，后端再依据能力库校验元操作ID、参数来源、依赖闭合、目标覆盖、操作顺序和证据引用。导入解析JSON也尊重当前模式，不会自动切换AI。
 
-中间区域的“AI可验证推理链”展示输入事实、目标、C2映射和校验结论。只有六项程序校验全部通过时才标记为逻辑可执行，状态为 `PHYSICAL_PENDING`；收到独立物理可执行确认后才能进入 `EXECUTABLE`。接口与JSON格式见 `docs/INTELLIGENT_PLANNER.md` 和 `schemas/reasoning-trace.schema.json`。
+中间区域的“任务流程说明”用流程图展示任务、仪器操作、循环、判断分支和待补条件，可展开查看事实、能力映射及校验明细。下方仍保留从能力库选取、可拖曳的操作卡片及物理确认卡片。手动修改卡片后须重新编排校验。
+
+逻辑检查关注能力是否登记、参数是否完整、来源是否可核验，以及依赖、目标和顺序是否匹配；通过后进入 `PHYSICAL_PENDING`。外部操作链可通过独立物理确认接口更新执行状态，但本地配置化条件流程始终保持 `execution_allowed=false`，不因逻辑通过、填满默认值或收到文字确认而授权设备执行。接口与JSON格式见 `docs/INTELLIGENT_PLANNER.md` 和 `schemas/reasoning-trace.schema.json`。
+
+## 待补参数与草案默认值
+
+已接入配置化编排的流程共用一套待补表单，根据本次任务范围列出缺失参数的名称、单位、用途和填写要求。表单在 C1 的“本次需要补充什么”中展示，默认收起；C3 只保留“待补参数”等状态，不重复展开整份清单。
+
+1. 输入任务并点击“生成实验流程”。例如：`执行一次完整的油脂提取实验`。
+2. 展开“本次需要补充什么”，直接填写，或点击“填入编排草案默认值”。
+3. 检查、修改数值后，点击“应用已填写项并重新编排”。也可以在“补充任务信息”中用文字补充。
+
+默认值只填入已配置且当前为空的字段，不覆盖已有内容，填入本身不提交。油脂抽提现有15项缺失参数的草案示例，静置流程配置了30秒及常规存放方式。它们是调试编排的示例值，不是标准规定或设备安全推荐值；实际使用前须核对加热条件、剂量、等待时长和设备能力。实测质量、实际对象标识、现场状态确认不自动编造。
+
+通用的是表单、缺项判断、填入及校验机制，不是所有流程天然都有默认值。新增配置流程需定义参数类型、单位、范围，并按需配置 `draft_default` 和 `draft_default_note`。提交的默认值保留 `source=draft_default`。详见[编排草案默认参数](docs/DRAFT_PARAMETER_DEFAULTS.md)。
+
+## 编排与物理确认
+
+已登记、描述完整且适用范围匹配的方法，不再仅因登记状态为 `draft` 而触发独立的“待方法审核”编排关卡；原始状态不会被自动改为已批准。未登记、不兼容、已否决或停用的方法仍不能通过逻辑检查，明确选择仅允许已批准知识时的场景准入限制也仍有效。
+
+- 方法适用性、实验条件及标准核对作为 `usage_prerequisites`，在 C1“流程使用前提与注意事项”中默认折叠展示，不占待补参数名额。
+- 设备适用性、通风、反馈、停止接口和后续烘箱准入等作为 `physical_requirements`，在物理可执行确认区域默认折叠展示，保持 `pending`。
+- 这些是后续真实设备校验的结构化接口要求，不表示已实现自动现场检测。缺参时仍可查看流程草案，但不代表编排校验通过，更不代表实机可执行。
+
+## 说明书导入与能力扩展
+
+点击 C2“添加元操作”，选择设备并上传有文字层的 PDF，可以生成带页码证据的候选任务，人工核对后审核、发布；支持新增设备、发布编号、单项或批次撤回。当前解析规则面向 VD10，不是任意仪器说明书的通用自动解析，也不对扫描页执行 OCR。
+
+导入能力使用独立扩展库保存，不修改基础能力库。发布不等于加入原自动编排或授权实机执行；新能力不能直接拖入生产流程，VD10条目可显式启用独立草案预览。这里的候选能力审核与实验流程中已取消的独立方法审核关卡不同。配置、权限、数据库持久化及限制见[说明书导入说明](docs/MANUAL_IMPORT.md)。
 
 ## 委托单意图识别
 
@@ -129,9 +170,9 @@ C1 的“导入解析结果 JSON”读取同事输出的单个 `add_to` 结果�
 
 流程图、待补表单和条件流程编排已改为配置驱动。场景目录为 `knowledge/planner_scenarios/registry.json`；新增“样品定时静置”用于验证数字、文字、选项和是/否参数跨场景复用。选择“AI智能编排”，可在智能规划选项中选择场景，或自动识别已登记场景；多个匹配不自动拼接。新增配置方式及仍需代码实现的边界见 `docs/CONFIGURED_WORKFLOWS.md`。原有VD10、定量移液适配器及MQTT协议保留。
 
-`data/vd10_agent_only_operation_tree.json` 提供 VD10 小操作节点，`data/meta-operations.json` 是界面、任务编排器和交接程序共同使用的唯一能力库。版本1.7.1包含93个兼容条目（仪器25、机器人63、环境5），其中55个为单节点条目、38个为历史组合。12组机器人组合示例另存 `data/robot-action-templates.json`，不作为元操作。拆解、复用与控制要求见 `docs/ROBOT_ACTION_CAPABILITIES.md`。登记能力不代表硬件已接入。格式约束见 `schemas/meta-operation-library.schema.json`，交接说明见 `docs/META_OPERATION_SPEC.md`、`docs/META_OPERATION_CATALOG.md` 和 `docs/META_OPERATION_HANDOFF.md`。
+`data/vd10_agent_only_operation_tree.json` 提供 VD10 小操作节点，`data/meta-operations.json` 是界面、任务编排器和交接程序共同使用的唯一能力库。版本1.9.1包含101个兼容条目（仪器28、机器人68、环境5），其中63个为单节点条目、38个为历史组合。屏幕场景复用已有测试信息准备、结果查询、质量状态检查、机械臂触摸屏操作和屏幕读取，不新增VD10专属硬件动作；此前未交付的临时九项屏幕接口已移除。C3顶部提供可视化流程；下方保留原有可拖曳C2操作卡片及对应物理确认卡片，不将判断和控制节点当作元操作。手动编辑后须重新校验，条件流程卡片不作为线性执行指令。测试与交接见 `docs/VD10_SCREEN.md`。12组机器人组合示例另存 `data/robot-action-templates.json`，不作为元操作。拆解、复用与控制要求见 `docs/ROBOT_ACTION_CAPABILITIES.md`。登记能力不代表硬件已接入。格式约束见 `schemas/meta-operation-library.schema.json`，交接说明见 `docs/META_OPERATION_SPEC.md`、`docs/META_OPERATION_CATALOG.md` 和 `docs/META_OPERATION_HANDOFF.md`。
 
-皮革油脂抽提已增加独立条件流程：选择“AI智能编排”，输入皮革二氯甲烷索氏抽提需求，界面显示阶段流程图、恒重循环及缺失参数。新增29个单步接口、参数来源核验、跨步骤数据引用和计算校验；设备仍待绑定，不执行硬件。使用方式与独立接口见 `docs/LEATHER_EXTRACTION.md`，场景定义在 `knowledge/planner_scenarios/leather_extraction.json`，资源配置在 `data/leather-extraction-resources.json`。原有MQTT协议不变。
+皮革油脂抽提采用独立条件流程：选择“AI智能编排”，输入皮革二氯甲烷索氏抽提需求，界面显示阶段流程图、恒重循环及缺失参数。场景0.4.0包含3mm剪样、四处独立恒重、索氏抽提器的抽提室分段加液、至少30次加热后完整回流、原加热工位挥发去除及实际装入干样质量计算；不生成蒸馏回收或重复水分校正。支持完整流程和已登记的局部操作，局部任务保留必要安全检查及收尾，不自动扩展成完整实验。方法使用前提与物理确认要求分开保留，两份平行样/六工位设备绑定和真实反馈仍待完成，不执行硬件。使用方式与独立接口见 `docs/LEATHER_EXTRACTION.md`，场景定义在 `knowledge/planner_scenarios/leather_extraction.json`，资源配置在 `data/leather-extraction-resources.json`。原有MQTT协议不变。
 
 `data/spatial-locations.json` 保存多楼层空间位置注册表，格式约束见 `schemas/spatial-location-library.schema.json`。坐标原点位于一楼墙角，统一使用米。用户提供的一楼送检工作台左下角坐标 `(1.025, 2.93, 0)`，长宽高为 `1.75 / 0.75 / 0.763 m`；VD10 位于三楼并由 `0.76 / 0.63 / 0.70 m` 的小桌支撑。
 
@@ -146,8 +187,12 @@ C2已移除空间位置展示及对应渲染代码。配置、只读接口和物
 ## 测试
 
 ```powershell
-node .\tests\meta-operation-library-test.js
-node .\tests\smoke-test.js
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*backend.py" -v
+Get-ChildItem .\tests -Filter '*-test.js' | ForEach-Object {
+    node $_.FullName
+    if ($LASTEXITCODE -ne 0) { throw "前端测试失败：$($_.Name)" }
+}
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 .\.venv\Scripts\python.exe -m compileall -q backend
 ```
+
+截至2026-11-19，本次提交前验证通过150项后端测试及6组前端测试；不包含真实云端模型、语音服务或硬件端到端验证。Windows受限环境可能阻止临时数据库或本地HTTP测试，应在具备相应本地权限的终端运行。

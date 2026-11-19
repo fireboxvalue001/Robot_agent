@@ -1,0 +1,30 @@
+{
+  "contract_version": "1.0.0",
+  "profile_id": "vd10.screen.profile.v1",
+  "version": "0.2.0",
+  "review_status": "draft",
+  "execution_enabled": false,
+  "adapter_implemented": false,
+  "capability_ids": [
+    "robot.meta.operate_touchscreen",
+    "robot.meta.read_result_from_screen",
+    "vd10.meta.inspect_quality_status",
+    "vd10.meta.prepare_test",
+    "vd10.meta.query_test_results"
+  ],
+  "targets": [
+    {
+      "id": "vd10.menu.enter_quality",
+      "source": "data/vd10_agent_only_operation_tree.json",
+      "locator": null,
+      "verified": false
+    },
+    {
+      "id": "vd10.quality.open_status",
+      "source": "data/vd10_agent_only_operation_tree.json",
+      "locator": null,
+      "verified": false
+    }
+  ],
+  "notice": "仅保存既有说明书目标与定位占位，不定义能力。旧临时VD10专属接口已移除，历史档案保留快照但不得重新执行。"
+}

@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "source_scenario_id": "leather_fat_extraction",
+  "full_intent_patterns": ["完整(?:实验)?流程", "全过程", "全流程", "从头到尾", "所有实验步骤"],
+  "continuation_patterns": ["拆卸", "挥发", "去除", "烘干", "干燥", "称量", "计算"],
+  "partial_patterns": ["只(?:做|进行|需要|想|对|测|计算|读|称|从|执行|要)", "仅", "单独", "部分(?:操作|流程|步骤)", "本次操作范围", "从(?!头到尾).+(?:开始|到|至)", "不(?:做|进行)", "不要"],
+  "forbidden_skip_patterns": ["(?:跳过|忽略|取消)(?:安全|通风|恒重判断|异常|残留)检查", "不(?:做|进行)(?:通风|安全|残留)检查"],
+  "segments": [
+    {"id":"weighing","label":"称量瓶恒重","phases":["weighing"],"aliases":["称量瓶恒重","称量瓶进行恒重"],"condition":"待清洗称量瓶、干燥器、烘箱和天平已准备好；本次不代替设备安全确认"},
+    {"id":"preparation","label":"皮革剪碎与混匀","phases":["preparation"],"aliases":["样品处理与环境检查","皮革剪切","样品剪切","剪碎混匀"],"condition":"待处理皮革及工具已准备好，需保留全部碎屑并分别关联两份独立平行样"},
+    {"id":"sample_drying","label":"皮革样品干燥与恒重","phases":["sample_drying"],"aliases":["皮样恒重","皮革干燥恒重","皮样干燥"],"condition":"皮样已剪碎混匀，所用称量瓶及瓶盖已恒重并具有有效记录"},
+    {"id":"sample","label":"干样称量与滤纸筒装填","phases":["sample"],"aliases":["抽提试样制备","制备抽提试样","称样装筒","试样装筒"],"condition":"已恒重的干皮样、对应编号滤纸筒和脱脂棉已准备好"},
+    {"id":"empty","label":"空抽提瓶恒重","phases":["empty"],"aliases":["空抽提瓶恒重","空抽提瓶进行恒重"],"condition":"空抽提瓶可进行清洗、干燥、冷却和称量；设备和器具已准备好"},
+    {"id":"assembly","label":"抽提室加液与装置安装","phases":["assembly"],"aliases":["加液与装置组装","装置组装","组装抽提装置"],"condition":"装样滤纸筒和恒重抽提瓶已准备好，已核实溶剂工具相容性及装置容量"},
+    {"id":"extraction","label":"索氏抽提与独立工位计数","phases":["startup","extraction"],"aliases":["索氏抽提与过程监测","回流抽提","索氏抽提","回流循环","冷凝检查与抽提启动"],"intent_patterns":["(?:完整)?回流[^。；;\n]*?后[^。；;\n]*?(?:停止|结束)加热", "(?:达到|完成)[^。；;\n]*?回流[^。；;\n]*?(?:停止|结束)加热"],"condition":"抽提室加液和装置安装已完成，各试样与工位映射明确；加液虹吸不计入加热抽提次数","safety_nodes":["ventilation"],"support_after_nodes":["bath_stop","heater_stopped_guard","read_cool","cool_guard","water_off"]},
+    {"id":"disassembly","label":"冷却与拆卸","phases":["disassembly"],"aliases":["冷却与拆卸","冷却拆卸","拆卸抽提装置"],"condition":"抽提完成状态已由实际过程确认；是否允许拆卸仍由原温度检查决定"},
+    {"id":"solvent_removal","label":"挥发除溶剂","phases":["solvent_removal"],"aliases":["挥发去除","挥发除去二氯甲烷","溶剂去除"],"condition":"抽提完成且已安全分离，萃取液保留于对应抽提瓶；实际方法、原工位与通风须审核","safety_nodes":["ventilation"]},
+    {"id":"final","label":"抽提后恒重","phases":["final"],"aliases":["抽提后恒重","最后恒重","最终恒重","抽提物恒重","萃取物恒重"],"condition":"实际溶剂去除和独立残留检查已完成，已确认允许进入烘箱；瓶体及萃取物身份已核对","safety_nodes":["ventilation"]},
+    {"id":"result","label":"含量计算","phases":["result"],"aliases":["含量计算","计算含量","计算结果","干基计算"],"condition":"提供同一份试样的真实m0、m1及实际投入干样质量md，来源与单位已核对，不重复水分校正"},
+    {"id":"weigh_once","label":"样品称量读数","nodes":["sample_mass"],"aliases":["样品称量读数","只称量一次","只读一次天平","仅称量一次"],"condition":"样品已放在天平上，称量方式已确认且读数稳定；单次读数不等同于实际装入量"}
+  ],
+  "external_values": {
+    "empty_check.constant_mass_g":{"label":"空抽提瓶恒重质量m0","type":"number","unit":"g","minimum":0},
+    "final_check.constant_mass_g":{"label":"抽提瓶及萃取物恒重总质量m1","type":"number","unit":"g","minimum":0},
+    "sample_loaded_mass.mass_g":{"label":"实际投入抽提的干样质量md","type":"number","unit":"g","minimum":0.000001}
+  }
+}

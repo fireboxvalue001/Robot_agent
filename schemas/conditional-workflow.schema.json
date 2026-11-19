@@ -9,8 +9,12 @@
     "kind": {"const": "conditional_experiment_workflow"},
     "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
     "name": {"type": "string"},
+    "task_scope": {"type": "object"},
+    "planning_context": {"type": "object"},
     "phases": {"type": "array", "items": {"type": "object", "required": ["id", "label"]}},
     "methods": {"type": "object"},
+    "usage_prerequisites": {"type": "array", "items": {"type": "object", "required": ["method_id", "label", "instruction"]}},
+    "physical_requirements": {"type": "array", "items": {"type": "object", "required": ["method_id", "label", "status", "checks", "instruction"], "properties": {"status": {"const": "pending"}, "checks": {"type": "array", "items": {"type": "string"}}}}},
     "entry": {"type": "string"},
     "parameters": {"type": "object"},
     "method": {"type": ["object", "null"]},
@@ -39,7 +43,7 @@
         "allOf": [
           {"if": {"properties": {"kind": {"const": "loop_check"}}}, "then": {"required": ["on_pass", "on_fail", "on_limit", "max_iterations_ref", "counter_id", "previous_state_ref", "repeat_state_updates", "threshold_ref", "comparison"]}},
           {"if": {"properties": {"kind": {"const": "monitored_hold"}}}, "then": {"required": ["operation_id", "duration_ref", "interval_ref", "on_error", "on_timeout", "guard"]}},
-          {"if": {"properties": {"kind": {"const": "compute"}}}, "then": {"required": ["formula", "data_refs"], "properties": {"formula": {"enum": ["moisture_fraction", "extractable_content_dry_basis"]}}}}
+          {"if": {"properties": {"kind": {"const": "compute"}}}, "then": {"required": ["formula", "data_refs"], "properties": {"formula": {"enum": ["moisture_fraction", "extractable_content_dry_basis", "extractable_content_from_dry_sample"]}}}}
         ]
       }
     }

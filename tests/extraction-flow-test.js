@@ -5,19 +5,42 @@ const path = require("path");
 const vm = require("vm");
 const root = path.resolve(__dirname, "..");
 const context = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(root, "operation-display.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "extraction-flow.js"), "utf8"), context);
 const scenario = JSON.parse(fs.readFileSync(path.join(root, "knowledge/planner_scenarios/leather_extraction.json"), "utf8"));
 const resources = JSON.parse(fs.readFileSync(path.join(root, "data/leather-extraction-resources.json"), "utf8"));
 const workflow = {name:scenario.name, phases:scenario.phases, nodes: scenario.nodes.map(node => ({...node, status: node.requires.length ? "needs_input" : "covered", reason: "定义已匹配，尚未执行"})), parameters: {}, resources: resources.resources};
 const result = context.renderExtractionWorkflow(workflow);
 assert(result.includes('<svg viewBox='));
-assert(result.includes("称量瓶恒重"));
+const svg = result.match(/<svg[\s\S]*?<\/svg>/)[0];
+assert(svg.includes("9. 停热拆卸与二氯甲烷去除"));
+assert(!svg.includes("挥发除溶剂与后续准入检查"));
+assert(svg.includes('data-phase-edge="disassembly:final"'));
+assert(result.includes("挥发除溶剂与后续准入检查"), "Detailed phases must remain separately inspectable");
+const removalOnly = context.renderExtractionWorkflow({...workflow,
+  nodes: workflow.nodes.filter(node => node.phase_id === "solvent_removal")});
+assert(removalOnly.match(/<svg[\s\S]*?<\/svg>/)[0].includes("挥发除溶剂与后续准入检查"));
+assert(result.includes("称量瓶及瓶盖恒重"));
 assert(result.includes("空抽提瓶恒重"));
-assert(result.includes("抽提后恒重"));
+assert(result.includes("萃取物干燥与恒重"));
+assert(result.includes("皮革样品干燥与恒重") && result.includes("相邻两次质量差≤待确认 mg"));
+workflow.parameters.weighing_threshold_mg = {value:3};
+assert(context.renderExtractionWorkflow(workflow).includes("相邻两次质量差≤3 mg"), "Diagram must use the actual threshold, not a fixed 5mg label");
+assert(!result.includes("蒸馏冷凝回收") && !result.includes("水分比例"));
+assert(result.includes("各工位≥待确认次；加液虹吸不计数"));
 assert(result.includes("达到上限 → 停止复核"));
 assert(result.includes("否：再次干燥"));
+assert(!svg.includes('class="extraction-loop-direction"'), "Loop arrows belong at the end only");
+assert.strictEqual((svg.match(/class="extraction-loop-arrow"/g) || []).length, 4);
 assert(result.includes("数据") && result.includes("尚未执行"));
 assert(!result.includes("元操作") && !result.includes("C2"));
+const compact = context.renderConfiguredWorkflow({...workflow,
+  task_scope:{mode:"partial",selected_segments:[{label:"含量计算"}]},
+  planning_context:{notice:"本图为一份独立试样的可复用流程。"}});
+assert(!compact.includes("本次只编排：") && !compact.includes("节点定义匹配"));
+assert(!compact.includes('<p>本图为一份独立试样的可复用流程。'));
+assert(compact.includes("结构化流程定义") && compact.includes("展开各阶段"));
+assert(context.renderConfiguredWorkflow({...workflow,task_scope:{mode:"needs_selection"}}).includes("尚未确定本次操作范围"));
 for (const node of scenario.nodes.filter(item => item.kind === "loop_check")) {
   const target = scenario.nodes.find(item => item.id === node.on_pass);
   const edge = result.match(new RegExp(`<g data-phase-edge="${node.phase_id}:${target.phase_id}">([\\s\\S]*?)</g>`));
@@ -42,6 +65,14 @@ workflow.clarifications = [
 ];
 const checklist = context.renderExtractionClarifications(workflow);
 assert(checklist.includes("1 项参数 · 1 项其他待处理"));
+assert.strictEqual((checklist.match(/方法尚未审核/g)||[]).length, 1);
+const methodOnly = context.renderConfiguredClarifications({clarifications:[workflow.clarifications[1]]});
+assert(methodOnly.includes("本次需要补充什么"));
+const usageOnly = context.renderConfiguredClarifications({clarifications:[],usage_prerequisites:[
+  {label:"挥发流程",instruction:"使用前确认适用性",checks:["标准适用范围"]}]});
+assert(usageOnly.includes("流程使用前提与注意事项") && usageOnly.includes("不阻断编排"));
+assert(!usageOnly.includes('clarification-method-review" open'));
+assert(!usageOnly.includes("待方法审核"));
 assert(checklist.includes('<details class="clarification-checklist-details">'));
 assert(!checklist.includes('<details class="clarification-checklist-details" open'), "Checklist must be collapsed by default");
 assert(checklist.includes('data-extraction-field="extraction_hours"'));
@@ -59,3 +90,19 @@ generic.clarifications = [{kind:"parameter",field:"mode",type:"string",label:"�
 const genericForm = context.renderConfiguredClarifications(generic);
 assert(genericForm.includes('<select') && genericForm.includes('value="遮光"') && genericForm.includes('value="是"'));
 console.log("leather extraction flow rendering test passed");
+
+generic.clarifications[0].draft_default = "常规";
+generic.clarifications[0].draft_default_note = "草案示例，待核对";
+const defaultsHtml = context.renderConfiguredClarifications(generic);
+assert(defaultsHtml.includes('data-fill-draft-defaults'));
+assert(defaultsHtml.includes('data-draft-default="常规"'));
+assert(!defaultsHtml.includes('data-draft-default="true"'));
+assert(!defaultsHtml.includes('selected'), "Defaults must not be selected before user action");
+const field = (value, draftDefault, valid = true) => ({value, dataset:{draftDefault}, checkValidity:()=>valid});
+const blank = field("", "30"), edited = field("60", "30"), invalid = field("", "-1", false);
+assert.strictEqual(context.fillConfiguredDraftDefaults({querySelectorAll:()=>[blank, edited, invalid]}), 1);
+assert.strictEqual(blank.value, "30");
+assert.strictEqual(blank.dataset.draftFilled, "true");
+assert.strictEqual(edited.value, "60");
+assert.strictEqual(invalid.value, "");
+assert.strictEqual(context.fillConfiguredDraftDefaults({querySelectorAll:()=>[blank, edited]}), 0);

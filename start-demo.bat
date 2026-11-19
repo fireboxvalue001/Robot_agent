@@ -1,4 +1,5 @@
 @echo off
+setlocal
 cd /d "%~dp0"
 set "PROJECT_PY=%~dp0.venv\Scripts\python.exe"
 if not exist "%PROJECT_PY%" (
@@ -13,4 +14,5 @@ if not errorlevel 1 (
   echo Open http://127.0.0.1:8877 in your browser.
   exit /b 0
 )
-"%PROJECT_PY%" -m uvicorn backend.server:app --host 127.0.0.1 --port 8877
+set "MANUAL_IMPORT_LOCAL_ACCESS=1"
+"%PROJECT_PY%" -m uvicorn backend.server:app --host 127.0.0.1 --port 8877 --no-proxy-headers

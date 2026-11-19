@@ -10,7 +10,11 @@
       "review_status": "draft",
       "description_status": "provided",
       "source": "用户2026-10-26补充的四步实际流程；非标准原文或设备说明书",
-      "extraction_completion": {"minimum_completed_reflux_cycles": 30, "count_source": "verified_observation_or_counter", "time_is_not_cycle_count": true},
+      "extraction_completion": {
+        "minimum_completed_reflux_cycles": 30,
+        "count_source": "verified_observation_or_counter",
+        "time_is_not_cycle_count": true
+      },
       "steps": [
         "按规定完成至少30次溶剂回流循环后停止加热，适当冷却后拆卸。",
         "取下索氏抽提器与装有皮革样品的滤纸筒，保留装有萃取液的抽提瓶，连接蒸馏回收装置。",
@@ -18,12 +22,49 @@
         "以不再持续产生馏出液且无明显大量游离溶剂作为蒸馏阶段的操作性结束参考，再按标准要求烘干、冷却和称量。"
       ],
       "distillation_endpoint": {
-        "all_of": ["no_continuous_distillate", "no_obvious_bulk_free_solvent"],
+        "all_of": [
+          "no_continuous_distillate",
+          "no_obvious_bulk_free_solvent"
+        ],
         "role": "operational_reference_only",
-        "does_not_prove": ["zero_residual_solvent", "safe_for_any_oven", "constant_mass"],
+        "does_not_prove": [
+          "zero_residual_solvent",
+          "safe_for_any_oven",
+          "constant_mass"
+        ],
         "confirmation": "由已验证观察接口或人员确认，不能仅凭计时推断"
       },
-      "pending_confirmation": ["蒸馏回收设备型号与控制配置", "受控加热的具体条件", "冷凝回收与通风反馈要求", "操作性结束参考的观察和确认方式", "适用标准名称版本、是否同时要求最短抽提时间及后续烘干条件"],
+      "pending_confirmation": [
+        "蒸馏回收设备型号与控制配置",
+        "受控加热的具体条件",
+        "冷凝回收与通风反馈要求",
+        "操作性结束参考的观察和确认方式",
+        "适用标准名称版本、是否同时要求最短抽提时间及后续烘干条件"
+      ],
+      "execution_allowed": false
+    },
+    {
+      "id": "dcm_evaporation_actual_v1",
+      "version": "0.1.0",
+      "name": "通风橱内原加热工位实际挥发去除",
+      "solvent": "dichloromethane",
+      "method_type": "evaporation",
+      "review_status": "draft",
+      "description_status": "provided",
+      "source": "油脂抽提实验步骤(第一次修订).docx第7部分第（1）项；用户确认采用实际路径，非标准符合性批准",
+      "steps": [
+        "萃取液充分虹吸回原抽提瓶",
+        "停止加热，冷却至允许安全拆卸后分离",
+        "在通风正常的原加热工位按已审核条件去除溶剂",
+        "无可见游离溶剂时停止，防暴沸、飞溅与干烧；独立核验后续烘箱准入"
+      ],
+      "pending_confirmation": [
+        "原加热工位型号、适用性及停止接口",
+        "挥发加热条件与防暴沸、飞溅措施",
+        "通风、暴露及废气控制与异常反馈",
+        "无可见游离溶剂的观察确认方式及烘箱准入要求",
+        "实验室方法批准及标准符合性核验"
+      ],
       "execution_allowed": false
     }
   ],
@@ -87,6 +128,14 @@
     {
       "id": "ventilation",
       "name": "通风设施",
+      "device_id": null,
+      "location_id": null,
+      "control_profile_id": null,
+      "status": "pending_binding"
+    },
+    {
+      "id": "extraction_heater",
+      "name": "抽提及实际挥发原加热工位（设备类型待绑定）",
       "device_id": null,
       "location_id": null,
       "control_profile_id": null,

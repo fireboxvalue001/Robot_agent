@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VD10 实验任务编排台 v0.3.0</title>
+  <title>实验任务编排台</title>
   <link rel="stylesheet" href="styles.css?v=3">
-  <link rel="stylesheet" href="meta-operation.css?v=5">
-  <link rel="stylesheet" href="planner-controls.css?v=13">
-  <link rel="stylesheet" href="extraction-flow.css?v=4">
+  <link rel="stylesheet" href="meta-operation.css?v=10">
+  <link rel="stylesheet" href="planner-controls.css?v=16">
+  <link rel="stylesheet" href="extraction-flow.css?v=6">
 </head>
 <body>
-  <header class="topbar"><div><p class="eyebrow">VD10 · 实验室智能操控模拟</p><h1>实验任务编排台</h1></div><div class="top-status"><span class="dot"></span>模拟模式 <span class="version">v0.3.0</span></div></header>
+  <header class="topbar"><div><h1>实验任务编排台</h1></div><div class="top-status"><span class="dot"></span>模拟模式 <span class="version">v0.3.0</span></div></header>
   <main>
     <section class="intent-panel panel-accent-red">
       <div class="section-title"><div><span class="stage-mark red">1</span><div><h2>总体意图输入与预处理</h2></div></div><span class="stage-state" id="intent-state">等待输入</span></div>
       <div class="intent-row">
-        <div class="intent-input-wrap"><label for="intent-input">描述实验目标或操作意图</label><textarea id="intent-input" rows="2">将桌上的样品分成4份，每份25ml，分别送到四个仪器中进行检测</textarea></div>
+        <div class="intent-input-wrap"><label for="intent-input">描述实验目标或操作意图</label><textarea id="intent-input" rows="2">执行一次完整的油脂提取实验</textarea></div>
         <div class="intent-actions">
           <div class="voice-actions"><button class="button voice" id="voice-start" type="button">开始语音输入</button><button class="button stop-voice" id="voice-stop" type="button" hidden>停止录音</button></div>
           <input id="document-intent-file" type="file" accept=".pdf,.txt,application/pdf,text/plain" hidden>
@@ -50,9 +50,28 @@
       <details id="mqtt-history-result" class="mqtt-result mqtt-history-result" hidden><summary>MQTT语义处理历史</summary><div id="mqtt-history-json" class="mqtt-history-list"></div></details>
     </section>
     <section class="workspace">
-      <aside class="panel library-panel panel-accent-blue"><div class="section-title"><div><span class="stage-mark blue">2</span><div><h2>元操作能力库</h2></div></div><span class="count" id="operation-count">0 项</span></div><p class="helper">从能力库拖拽元操作，或点击“+”加入任务流程。说明书内部操作树在元操作详情中查看。</p><input id="library-search" class="search" type="search" placeholder="搜索元操作"><div id="operation-library" class="operation-library"></div></aside>
+      <aside class="panel library-panel panel-accent-blue"><div class="section-title"><div><span class="stage-mark blue">2</span><div><h2>元操作能力库</h2></div></div><span class="count" id="operation-count">0 项</span></div><p class="helper">从能力库拖拽元操作，或点击“+”加入任务流程。说明书内部操作树在元操作详情中查看。</p><button id="manual-import-open" type="button" class="button primary">添加元操作</button><input id="library-search" class="search" type="search" placeholder="搜索元操作"><div id="operation-library" class="operation-library"></div></aside>
       <section class="panel flow-panel panel-accent-purple"><div class="section-title"><div><span class="stage-mark purple">3</span><div><h2>任务流程编排</h2></div></div><button class="text-button" id="clear-flow">清空流程</button></div><details class="reasoning-trace-panel" open><summary><span>任务流程说明</span><span id="reasoning-decision" class="trace-decision">尚未生成</span></summary><p class="trace-notice">任务要求 → 仪器与操作 → 流程检查；需要补充的信息或无法完成的步骤会单独标出。</p><div id="reasoning-trace" class="reasoning-trace"><div class="empty compact-empty">选择已登记实验场景并生成流程后显示</div></div></details><div class="flow-stage semantic-stage"><div class="flow-heading"><div><span class="stage-pill purple-pill">阶段一</span><strong>意图到元操作</strong><small>检查任务目标与元操作的输入输出是否衔接</small></div><span id="semantic-state" class="check-state">待生成</span></div><ol id="semantic-flow" class="flow-list"></ol></div><div class="flow-divider">↓ 进入物理可执行确认</div><div class="flow-stage physical-stage"><div class="flow-heading"><div><span class="stage-pill orange-pill">阶段二</span><strong>物理可执行确认</strong><small>检查位置、设备、资源和时序条件</small></div><span id="physical-state" class="check-state">待校验</span></div><ol id="physical-flow" class="flow-list"></ol></div></section>
-      <aside class="panel result-panel panel-accent-blue"><div class="section-title"><div><span class="stage-mark blue">4</span><div><h2>执行状态与实验结果</h2></div></div><button class="button compact" id="simulate-execution">模拟执行</button></div><div class="tabs"><button class="tab active" data-tab="status">执行状态与记录</button><button class="tab" data-tab="results">结构化实验结果</button></div><div id="tab-status" class="tab-content"></div><div id="tab-results" class="tab-content" hidden></div></aside>
+      <aside class="panel result-panel panel-accent-blue"><div class="section-title"><div><span class="stage-mark blue">4</span><div><h2>执行状态与实验结果</h2></div></div><button class="button compact" id="simulate-execution">模拟执行</button></div><div class="tabs"><button class="tab active" data-tab="status">执行状态与记录</button><button class="tab" data-tab="results">结构化实验结果</button></div><div id="tab-status" class="tab-content"></div><div id="tab-results" class="tab-content" hidden></div>
+        <details class="mqtt-result" id="execution-history"><summary>本地执行档案</summary>
+          <p class="helper">流程与记录变化后自动保存到本机后端。历史只读，不恢复运行、不下发设备指令；草案和演示记录不是真实实验记录。</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="button compact" id="archive-save" type="button">保存当前记录</button><button class="button compact" id="archive-refresh" type="button">刷新历史</button></div>
+          <p id="archive-status" class="helper" role="status">正在读取本地档案…</p>
+          <div id="archive-list"></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="button compact" id="archive-prev" type="button">上一页</button><span id="archive-page"></span><button class="button compact" id="archive-next" type="button">下一页</button></div>
+          <section id="archive-detail" hidden><h3 id="archive-detail-title" style="overflow-wrap:anywhere"></h3><button class="button compact" id="archive-export" type="button">导出本条JSON</button><div id="archive-records" style="max-height:520px;overflow:auto;margin-top:12px"></div><details><summary>完整计划与数据快照</summary><pre id="archive-json" style="max-height:480px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere"></pre></details></section>
+        </details>
+      </aside>
     </section>
-  </main><div id="toast" class="toast"></div><script src="voice-input.js?v=4"></script><script src="mqtt-input.js?v=5"></script><script src="document-intent.js?v=1"></script><script src="extraction-flow.js?v=6"></script><script src="app.js?v=44"></script>
+  <dialog id="manual-import" aria-labelledby="manual-import-title">
+    <header class="manual-header"><div><h2 id="manual-import-title">添加元操作</h2><p>从说明书生成任务草稿，审核后发布到能力库。不会改变原编排或执行权限。</p></div><form method="dialog"><button class="button secondary" aria-label="关闭添加元操作">关闭</button></form></header>
+    <div class="manual-body">
+      <div class="manual-fields"><label>目标设备 <select id="manual-device"><option value="">请选择设备</option></select></label><label>说明书 PDF <input type="file" accept=".pdf,application/pdf"></label><label hidden>管理员令牌 <input type="password" autocomplete="off"></label></div>
+      <div class="manual-device-actions"><button id="manual-device-new" type="button" class="button secondary" aria-expanded="false">新增设备</button><form id="manual-device-form" hidden><label>设备名称 <input id="manual-device-name" required maxlength="80" placeholder="例如：自动闪点测定仪"></label><button type="submit" class="button primary">保存设备</button></form><label id="manual-reuse-label" hidden><input id="manual-reuse-vd10" type="checkbox"> 批准所选设备使用此说明书</label><p id="manual-device-note" class="helper"></p></div>
+      <div class="manual-actions"></div><p role="status"></p>
+      <label class="manual-filter">审核状态 <select><option value="">全部</option><option value="draft">待审核</option><option value="approved">待发布</option><option value="published">已发布</option><option value="rejected">已驳回</option><option value="withdrawn">已撤回</option></select></label>
+      <div class="manual-candidates"></div>
+    </div>
+  </dialog>
+  </main><div id="toast" class="toast"></div><script src="voice-input.js?v=4"></script><script src="mqtt-input.js?v=5"></script><script src="document-intent.js?v=1"></script><script src="operation-display.js?v=1"></script><script src="extraction-flow.js?v=15"></script><script src="app.js?v=64"></script><script src="manual-import.js?v=13"></script><script src="execution-history.js?v=3"></script>
 </body></html>

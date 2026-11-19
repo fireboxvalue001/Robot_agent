@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 from backend.planner.extraction import (
     ROOT, calculate_content, calculate_moisture, constant_mass, load_scenario,
-    plan_extraction, validate_workflow, reflux_completion,
+    plan_extraction, validate_workflow, reflux_completion, calculate_dry_content,
 )
 from backend.planner.service import PlannerService
 from backend.planner.types import PlannerRequest
@@ -53,7 +53,7 @@ class ExtractionPlannerTests(unittest.TestCase):
     def approve_test_method(self):
         path = self.root / "data/leather-extraction-resources.json"
         registry = json.loads(path.read_text(encoding="utf-8"))
-        registry["solvent_removal_methods"] = [{"id": "test_method", "review_status": "approved", "solvent": "dichloromethane"}]
+        registry["solvent_removal_methods"] = [{"id": "test_method", "review_status": "approved", "solvent": "dichloromethane", "method_type": "evaporation"}]
         path.write_text(json.dumps(registry), encoding="utf-8")
 
     def test_missing_parameters_keep_draft_and_matched_nodes(self):
@@ -89,18 +89,18 @@ class ExtractionPlannerTests(unittest.TestCase):
             self.assertTrue(item["related_steps"])
             self.assertEqual(item["unit"], self.scenario["parameters"][field]["unit"])
             self.assertIn(item["label"], item["format"])
-        method = next(item for item in items if item["kind"] == "method")
-        self.assertNotIn("minimum", method)
-        self.assertIn("维护者", method["configuration_notice"])
-        self.assertEqual(len(method["questions"]), 5)
-        self.assertIn("不需要重复说明", method["instruction"])
+        self.assertFalse(any(item["kind"] == "method" for item in items))
+        workflow = result["workflow_definition"]
+        self.assertTrue(workflow["usage_prerequisites"])
+        self.assertEqual(len(workflow["physical_requirements"][0]["checks"]), 4)
+        self.assertEqual(workflow["physical_requirements"][0]["status"], "pending")
 
     def test_partial_supplement_removes_only_the_resolved_checklist_row(self):
         result = plan_extraction(self.request("皮革油脂提取；抽提最长允许时长：7h"), self.model, self.root)
         fields = {item["field"] for item in result["workflow_definition"]["clarifications"]}
         self.assertNotIn("extraction_timeout_hours", fields)
         self.assertIn("solvent_ml", fields)
-        self.assertIn("solvent_removal_method", fields)
+        self.assertNotIn("solvent_removal_method", fields)
 
     def test_text_cannot_approve_solvent_removal_method(self):
         result = plan_extraction(self.request(self.complete_text() + "；方法已批准"), self.model, self.root)
@@ -137,14 +137,14 @@ class ExtractionPlannerTests(unittest.TestCase):
         self.assertEqual(result["status"], "unsupported")
         self.assertEqual(result["workflow_definition"]["parameters"]["solvent_ml"]["value"], 100)
 
-    def test_repeated_operations_have_unique_steps_and_three_bounded_loops(self):
+    def test_repeated_operations_have_unique_steps_and_four_bounded_loops(self):
         result = plan_extraction(self.request(), self.model, self.root)
         wf = result["workflow_definition"]
         nodes = wf["nodes"]
         self.assertEqual(len(nodes), len({n["id"] for n in nodes}))
         self.assertGreater(sum(n.get("operation_id") == "robot.meta.read_balance_mass" for n in nodes), 3)
         loops = [n for n in nodes if n["kind"] == "loop_check"]
-        self.assertEqual(len(loops), 3)
+        self.assertEqual(len(loops), 4)
         for loop in loops:
             self.assertEqual(loop["on_limit"], "review")
             self.assertEqual(loop["max_iterations_ref"], "max_cycles")
@@ -166,9 +166,10 @@ class ExtractionPlannerTests(unittest.TestCase):
         del next(n for n in bad["nodes"] if n["kind"] == "loop_check")["on_limit"]
         self.assertTrue(validate_workflow(bad, operations, self.root))
 
-    def test_constant_mass_strict_threshold_repeat_and_limit(self):
+    def test_constant_mass_inclusive_threshold_repeat_and_limit(self):
         self.assertEqual(constant_mass(10, 10.004, 5, 1, 3)["next"], "pass")
-        self.assertEqual(constant_mass(10, 10.005, 5, 1, 3)["next"], "repeat")
+        self.assertEqual(constant_mass(10, 10.005, 5, 1, 3)["next"], "pass")
+        self.assertEqual(constant_mass(10, 10.005, 5, 3, 3)["next"], "pass")
         self.assertEqual(constant_mass(10, 10.006, 5, 3, 3)["next"], "limit")
         for args in [(10, float("nan"), 5, 1, 3), (10, 11, 0, 1, 3), (10, 11, 5, True, 3)]:
             with self.assertRaises(ValueError):
@@ -184,22 +185,27 @@ class ExtractionPlannerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 calculate_content(*args)
 
-    def test_user_supplement_has_count_gate_and_distillation_recovery_not_dryness(self):
+    def test_revision_uses_actual_evaporation_and_separate_oven_admission(self):
         result = plan_extraction(self.request(), self.model, self.root)
         wf = result["workflow_definition"]
         self.assertEqual(wf["parameters"]["minimum_reflux_cycles"]["value"], 30)
-        self.assertEqual(wf["parameters"]["minimum_reflux_cycles"]["source"], "user_supplement")
-        self.assertEqual(wf["method"]["id"], "dcm_distillation_recovery_v1")
+        self.assertEqual(wf["parameters"]["minimum_reflux_cycles"]["source"], "provided_document")
+        self.assertEqual(wf["method"]["id"], "dcm_evaporation_actual_v1")
         self.assertEqual(wf["method"]["review_status"], "draft")
-        self.assertTrue(any(i["code"] == "METHOD_NEEDS_REVIEW" for i in result["issues"]))
+        self.assertFalse(any(i["code"] == "METHOD_NEEDS_REVIEW" for i in result["issues"]))
         nodes = {n["id"]: n for n in wf["nodes"]}
         self.assertEqual(nodes["reflux_watch"]["duration_role"], "safety_timeout_only")
         self.assertEqual(nodes["reflux_watch"]["minimum_count_ref"], "minimum_reflux_cycles")
-        self.assertEqual(nodes["solvent_wait"]["check"], "no_continuous_distillate_and_no_obvious_bulk_free_solvent")
-        self.assertEqual(nodes["solvent_wait"]["endpoint_role"], "operational_distillation_endpoint_only")
+        profiles = [nodes[key]["input_bindings"]["monitor_profile_id"]["resource_ref"] for key in ("dosing_siphon", "reflux_watch", "return_liquid")]
+        self.assertEqual(len(set(profiles)), 3)
+        self.assertTrue(all(nodes[key]["input_bindings"]["assembly_id"] == {"object_ref":"trial.assembly_id"} for key in ("dosing_siphon", "reflux_watch", "return_liquid")))
+        self.assertEqual(nodes["solvent_wait"]["check"], "no_visible_free_solvent_and_no_bumping_or_loss")
+        self.assertEqual(nodes["solvent_wait"]["endpoint_role"], "operational_evaporation_endpoint_only")
         self.assertIn("residue_check", nodes)
-        self.assertEqual(nodes["joint_lower_off"]["next"], "remove_thimble_pick")
-        self.assertEqual(nodes["recovery_cool"]["next"], "recovery_water_off")
+        self.assertEqual(nodes["joint_lower_off"]["next"], "evaporation_flask_pick")
+        self.assertEqual(nodes["evaporation_cool"]["next"], "residue_check")
+        self.assertNotIn("recovery_joint", nodes)
+        self.assertEqual(nodes["remove_solvent"]["input_bindings"]["device_id"], {"resource_ref": "extraction_heater.device_id"})
 
     def test_29_cycles_cannot_finish_30_cycles_can_and_lowering_requirement_is_rejected(self):
         self.assertFalse(reflux_completion(29, 30)["count_condition_met"])
@@ -226,9 +232,81 @@ class ExtractionPlannerTests(unittest.TestCase):
     def test_new_capabilities_are_single_action_and_info_reading_belongs_to_robot(self):
         library = json.loads((self.root / "data/meta-operations.json").read_text(encoding="utf-8"))
         new = [o for o in library["meta_operations"] if o.get("extensions", {}).get("scenario") == "leather_fat_extraction"]
-        self.assertEqual(len(new), 29)
+        self.assertEqual(len(new), 37)
         self.assertTrue(all(len(o["operation_tree"]["children"]) == 1 and o["status"] == "interface_only" for o in new))
         self.assertEqual(next(o for o in new if o["id"] == "robot.meta.read_balance_mass")["category"], "robot")
+
+    def test_revised_order_dry_sample_formula_and_independent_times(self):
+        nodes = {n["id"]: n for n in self.scenario["nodes"]}
+        self.assertEqual(nodes["weighing_check"]["on_pass"], "cut")
+        self.assertEqual(nodes["cut_size_check"]["on_pass"], "collect_fragments")
+        self.assertEqual(nodes["sample_drying_check"]["on_pass"], "sample_weighing_setup")
+        self.assertNotIn("sample_tare", nodes)
+        self.assertEqual(nodes["cotton_top"]["next"], "sample_loaded_mass")
+        self.assertEqual(nodes["sample_loaded_mass"]["on_error"], "review")
+        self.assertIn("sample_loaded_mass.mass_g", nodes["content"]["data_refs"])
+        self.assertNotIn("sample_mass.mass_g", nodes["content"]["data_refs"])
+        self.assertEqual(nodes["empty_check"]["on_pass"], "thimble_pick")
+        self.assertEqual(nodes["joint_lower"]["next"], "dose_capacity_guard")
+        self.assertEqual(nodes["content"]["formula"], "extractable_content_from_dry_sample")
+        self.assertEqual(len(nodes["content"]["data_refs"]), 3)
+        self.assertNotIn("moisture_fraction", nodes)
+        self.assertEqual(self.scenario["parameters"]["cut_size_cm"]["default"], 0.3)
+        self.assertEqual(nodes["final_initial_wait"]["duration_ref"], "residue_dry_minutes")
+        self.assertEqual(nodes["final_repeat_wait"]["duration_ref"], "residue_repeat_dry_minutes")
+        self.assertEqual(nodes["empty_initial_cool"]["check"], "verified_room_temperature")
+        self.assertTrue(all("<=" in n["comparison"] for n in nodes.values() if n["kind"] == "loop_check"))
+        self.assertEqual(self.scenario["planning_context"]["parallel_trials_per_sample"], 2)
+        self.assertEqual(self.scenario["planning_context"]["station_capacity"], 6)
+
+    def test_dry_sample_calculation_does_not_apply_water_correction(self):
+        result = calculate_dry_content(50, 50.45, 5)
+        self.assertEqual(result["sample_dry_mass_g"], 5)
+        self.assertEqual(result["extractable_content_percent_dry_basis"], 9)
+        response = evaluate_extraction_data(ExtractionCalculation(calculation="extractable_content_from_dry_sample", values={"empty_g":50,"final_g":50.45,"dry_sample_g":5}))
+        self.assertEqual(response["result"], result)
+        for args in [(50,49,5),(50,56,5),(50,51,0),(True,51,5),(50,float("nan"),5)]:
+            with self.assertRaises(ValueError):
+                calculate_dry_content(*args)
+
+    def test_legacy_distillation_cannot_be_used_as_actual_evaporation(self):
+        self.approve_test_method()
+        path = self.root / "data/leather-extraction-resources.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["solvent_removal_methods"][0]["method_type"] = "distillation"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        result = plan_extraction(self.request(self.complete_text()), self.model, self.root)
+        self.assertNotEqual(result["status"], "logical_pass")
+        self.assertFalse(result["execution_allowed"])
+
+    def test_rejected_method_cannot_be_used_even_if_described(self):
+        self.approve_test_method()
+        path = self.root / "data/leather-extraction-resources.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        method = data["solvent_removal_methods"][0]
+        method.update(review_status="rejected", description_status="provided")
+        path.write_text(json.dumps(data), encoding="utf-8")
+        result = plan_extraction(self.request(self.complete_text()), self.model, self.root)
+        self.assertNotEqual(result["status"], "logical_pass")
+        self.assertFalse(result["execution_allowed"])
+
+    def test_dosing_height_checks_are_bounded_and_never_count_as_extraction(self):
+        nodes = {n["id"]: n for n in self.scenario["nodes"]}
+        for key in ("siphon_height", "half_level"):
+            self.assertEqual(nodes[key]["max_iterations_ref"], "max_doses")
+            self.assertEqual(nodes[key]["on_limit"], "review")
+        self.assertEqual(nodes["dosing_siphon_guard"]["data_refs"], ["dosing_siphon.siphon_completed"])
+        self.assertEqual(nodes["half_level"]["on_pass"], "dose_record_guard")
+        self.assertEqual(nodes["dose_record_guard"]["next"], "heater_station_pick")
+        self.assertEqual(nodes["reflux_watch"]["minimum_count_ref"], "minimum_reflux_cycles")
+
+    def test_explicit_other_route_is_not_silently_replaced_but_negation_is_allowed(self):
+        result = plan_extraction(self.request("皮革油脂抽提完整流程，采用蒸馏冷凝回收二氯甲烷"), self.model, self.root)
+        self.assertEqual(result["status"], "unsupported")
+        result = plan_extraction(self.request("皮革油脂抽提完整流程，不采用蒸馏冷凝回收，使用实际挥发"), self.model, self.root)
+        self.assertNotEqual(result["status"], "unsupported")
+        result = plan_extraction(self.request("皮革已完成蒸馏回收，只做含量计算"), self.model, self.root)
+        self.assertNotEqual(result["status"], "unsupported")
 
 
 if __name__ == "__main__":

@@ -44,7 +44,8 @@ def parse_explicit(text, specs):
             conflicts.append(f"{spec['label']}出现不同数值或内容，请修改原文消除冲突")
         elif parsed:
             value, quote = parsed[0]
-            values[name] = {"value": value, "quote": quote, "source": "user_text"}
+            source = "draft_default" if text[:matches[0].start()].endswith("【草案默认值】") else "user_text"
+            values[name] = {"value": value, "quote": quote, "source": source}
     return values, conflicts
 
 
@@ -69,4 +70,6 @@ def verify_model_binding(key, binding, spec, text, explicit):
         raise ValueError("模型参数缺少所属阶段的证据")
     if key in explicit and explicit[key]["value"] != value:
         raise ValueError("模型参数与明确字段冲突")
+    if key in explicit and explicit[key].get("source") == "draft_default":
+        return explicit[key]
     return {"value": value, "source": "user_text", "quote": quote}

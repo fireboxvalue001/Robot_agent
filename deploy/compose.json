@@ -1,0 +1,42 @@
+{
+  "name": "vd10-workflow",
+  "services": {
+    "app": {
+      "image": "vd10-workflow:${VD10_RELEASE:-candidate}",
+      "build": {
+        "context": "..",
+        "dockerfile": "deploy/Dockerfile",
+        "args": { "VCS_REF": "${VD10_REVISION:-unverified}" }
+      },
+      "env_file": ["./server.env"],
+      "environment": {
+        "MQTT_ENABLED": "false",
+        "MQTT_HISTORY_DIR": "/var/lib/vd10/mqtt_history",
+        "MANUAL_IMPORT_DB": "/var/lib/vd10/manual-capabilities.sqlite3"
+      },
+      "ports": ["127.0.0.1:8877:8877"],
+      "volumes": ["app-data:/var/lib/vd10"],
+      "read_only": true,
+      "tmpfs": ["/tmp:rw,noexec,nosuid,size=64m"],
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "init": true,
+      "restart": "unless-stopped",
+      "pids_limit": 256,
+      "mem_limit": "2g",
+      "cpus": 2,
+      "healthcheck": {
+        "test": ["CMD", "python", "-c", "import json,urllib.request; r=json.load(urllib.request.urlopen('http://127.0.0.1:8877/api/health',timeout=5)); assert r['status']=='ok' and r['mqtt']['enabled'] is False"],
+        "interval": "30s",
+        "timeout": "10s",
+        "start_period": "30s",
+        "retries": 3
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": { "max-size": "10m", "max-file": "3" }
+      }
+    }
+  },
+  "volumes": { "app-data": {} }
+}

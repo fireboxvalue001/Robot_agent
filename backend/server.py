@@ -15,6 +15,8 @@ from .asr_service import detect_voice_format, transcribe_with_tencent_cloud
 from .document_intent.router import router as document_intent_router
 from .document_intent.service import runtime_status as document_intent_runtime_status
 from .mqtt_service import mqtt_service
+from .execution_history import router as execution_history_router
+from .manual_import import router as manual_import_router
 from .planning_service import plan_natural_language
 from .local_semantic_adapter import resolve_local_semantic
 from .planner.router import planner_runtime_status, router as planner_router
@@ -36,12 +38,14 @@ MAX_AUDIO_SIZE = 3 * 1024 * 1024
 META_OPERATION_LIBRARY = FRONTEND_DIR / "data" / "meta-operations.json"
 SPATIAL_LOCATION_LIBRARY = FRONTEND_DIR / "data" / "spatial-locations.json"
 PUBLIC_ASSETS = {
-    "extraction-flow.js", "extraction-flow.css",
+    "manual-import.js",
+    "operation-display.js", "execution-history.js", "extraction-flow.js", "extraction-flow.css",
     "app.js", "document-intent.js", "index.html", "meta-operation.css", "mqtt-input.js",
     "planner-controls.css", "styles.css", "voice-input.js",
 }
 PUBLIC_DATA_FILES = {
     "leather-extraction-resources.json",
+    "vd10-screen-profile.json", "vd10-screen-resources.json",
     "robot-action-templates.json",
     "meta-operations.json", "spatial-locations.json", "vd10_agent_only_operation_tree.json",
 }
@@ -57,6 +61,8 @@ async def lifespan(application: FastAPI):
 app = FastAPI(title="VD10 Visual Workflow with ASR and MQTT", version="0.3.0", lifespan=lifespan)
 app.include_router(planner_router)
 app.include_router(document_intent_router)
+app.include_router(execution_history_router)
+app.include_router(manual_import_router)
 
 
 class AsrTimingRequest(BaseModel):
@@ -134,6 +140,15 @@ def get_robot_action_templates() -> dict:
     return {"libraryId": data["library_id"], "libraryVersion": data["library_version"],
             "checksum": "sha256:" + hashlib.sha256(raw).hexdigest(), "kind": data["kind"],
             "notice": data["notice"], "recipes": data["recipes"]}
+
+
+@app.get("/api/v1/capabilities/vd10-screen")
+def get_vd10_screen_profile() -> dict:
+    profile = json.loads((FRONTEND_DIR / "data/vd10-screen-profile.json").read_text(encoding="utf-8"))
+    library = json.loads(META_OPERATION_LIBRARY.read_text(encoding="utf-8"))
+    return {"profile": profile, "execution_allowed": False, "adapter_implemented": False,
+            "library_version": library["schema_version"], "capability_source": "data/meta-operations.json",
+            "blockers": ["真实点击驱动未接入", "设备绑定及定位配置尚需实机审核", "既有C2能力的反馈及运行器未接入"]}
 
 
 @app.post("/api/v1/planning/from-text")

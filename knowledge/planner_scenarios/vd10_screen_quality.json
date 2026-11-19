@@ -1,0 +1,157 @@
+{
+  "scenario_id": "vd10_screen_quality",
+  "name": "VD10屏幕质量状态查看",
+  "knowledge_id": "autolab.planner.vd10_screen_quality",
+  "version": "0.2.1",
+  "review_status": "draft",
+  "scope": "VD10屏幕质量状态查看；只允许组合既有C2能力，不启动检测、不删除、不校准、不退出或关机。",
+  "source": "data/meta-operations.json中的既有能力及原VD10说明书节点；不是新增硬件接口定义",
+  "entry": "start",
+  "resource_file": "data/vd10-screen-resources.json",
+  "phases": [
+    {
+      "id": "start",
+      "label": "任务入口"
+    },
+    {
+      "id": "phase_1",
+      "label": "1. VD10质量状态检查"
+    },
+    {
+      "id": "phase_2",
+      "label": "2. 非联网仪器屏幕数据读取"
+    },
+    {
+      "id": "exception",
+      "label": "异常复核",
+      "exception": true
+    }
+  ],
+  "parameters": {},
+  "nodes": [
+    {
+      "id": "start",
+      "kind": "start",
+      "label": "任务入口",
+      "phase_id": "start",
+      "requires": [],
+      "next": "step_1"
+    },
+    {
+      "id": "step_1",
+      "kind": "action",
+      "label": "VD10质量状态检查",
+      "phase_id": "phase_1",
+      "requires": [],
+      "operation_id": "vd10.meta.inspect_quality_status",
+      "input_bindings": {},
+      "outputs": [
+        "quality_status"
+      ],
+      "next": "check_1",
+      "on_error": "review",
+      "on_timeout": "review",
+      "display": {
+        "title": "VD10质量状态检查",
+        "fields": [],
+        "notice": "直接引用已有C2能力；多内部节点条目仍为历史组合，不是新定义的单步动作。"
+      }
+    },
+    {
+      "id": "check_1",
+      "kind": "guard",
+      "label": "核验能力反馈",
+      "phase_id": "phase_1",
+      "requires": [],
+      "data_refs": [
+        "step_1.quality_status"
+      ],
+      "check": {
+        "operation_id": "vd10.meta.inspect_quality_status",
+        "required_outputs": [
+          "quality_status"
+        ]
+      },
+      "on_pass": "step_2",
+      "on_fail": "review",
+      "on_error": "review",
+      "on_timeout": "review"
+    },
+    {
+      "id": "step_2",
+      "kind": "action",
+      "label": "非联网仪器屏幕数据读取",
+      "phase_id": "phase_2",
+      "requires": [],
+      "operation_id": "robot.meta.read_result_from_screen",
+      "input_bindings": {
+        "device_id": {
+          "value": "vd10"
+        }
+      },
+      "outputs": [
+        "recognized_result",
+        "confidence"
+      ],
+      "next": "check_2",
+      "on_error": "review",
+      "on_timeout": "review",
+      "display": {
+        "title": "非联网仪器屏幕数据读取",
+        "fields": [
+          {
+            "argument": "device_id",
+            "label": "仪器"
+          }
+        ],
+        "notice": "直接引用已有C2能力；多内部节点条目仍为历史组合，不是新定义的单步动作。"
+      }
+    },
+    {
+      "id": "check_2",
+      "kind": "guard",
+      "label": "核验能力反馈",
+      "phase_id": "phase_2",
+      "requires": [],
+      "data_refs": [
+        "step_2.recognized_result",
+        "step_2.confidence"
+      ],
+      "check": {
+        "operation_id": "robot.meta.read_result_from_screen",
+        "required_outputs": [
+          "recognized_result",
+          "confidence"
+        ]
+      },
+      "on_pass": "complete",
+      "on_fail": "review",
+      "on_error": "review",
+      "on_timeout": "review"
+    },
+    {
+      "id": "complete",
+      "kind": "end",
+      "label": "流程结束 尚未执行",
+      "phase_id": "phase_2",
+      "requires": []
+    },
+    {
+      "id": "review",
+      "kind": "end",
+      "label": "停止任务并人工复核",
+      "phase_id": "exception",
+      "requires": []
+    }
+  ],
+  "blocked_request_patterns": [
+    {
+      "pattern": "(?<!不)(?<!不要)(?:启动|开始)(?:VD10)?(?:检测|测试)|(?<!不)(?<!不要)删除.*结果|(?<!不)(?<!不要)校准|(?<!不)(?<!不要)关机|(?<!不)(?<!不要)退出",
+      "message": "该场景只支持已登记屏幕交互，不支持启动检测、删除、校准、退出或关机。"
+    }
+  ],
+  "limits": {
+    "max_automatic_retries": 0,
+    "execution_allowed": false
+  }
+}

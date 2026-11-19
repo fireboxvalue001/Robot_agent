@@ -1,4 +1,31 @@
 /* Meta-operation layer: instrument green, robot blue, laboratory red. */
+#manual-import-open { margin: 0 0 10px; }
+#manual-import { width: min(920px, calc(100vw - 32px)); max-height: 86vh; padding: 0; border: 1px solid #465873; border-radius: 14px; background: #111925; color: var(--text); }
+#manual-import::backdrop { background: #070b12bb; }
+.manual-header { position: sticky; top: 0; z-index: 1; display: flex; gap: 16px; justify-content: space-between; padding: 16px 22px; background: #182337; border-bottom: 1px solid #36445b; }
+.manual-header h2, .manual-header p { margin: 0; }
+.manual-header p { color: #b8c6db; }
+.manual-body { padding: 14px 22px 22px; }
+.manual-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px; }
+#manual-import .secondary, #manual-import input::file-selector-button { background: #2c3c54; color: #f3f7ff; border: 1px solid #526683; border-radius: 6px; padding: 8px 11px; }
+#manual-import .button:disabled { opacity: .55; cursor: wait; }
+#manual-import input, #manual-import textarea, #manual-import select { font: inherit; background: #101827; color: #edf3ff; border: 1px solid #4b5d7a; border-radius: 6px; padding: 7px; }
+#manual-import textarea { resize: vertical; }
+#manual-import .manual-candidates { display: grid; gap: 10px; }
+#manual-import .manual-card { background: #19263a; border: 1px solid #405677; border-left: 3px solid #7aa4ff; border-radius: 8px; padding: 12px 15px; }
+#manual-import .manual-card h3 { margin: 0; font-size: 16px; }
+#manual-import .manual-card p { margin: 5px 0; color: #c7d5ec; }
+#manual-import .manual-card summary { color: #b4cbff; cursor: pointer; }
+#manual-import .manual-card blockquote { border-left: 2px solid #516788; padding-left: 9px; }
+.instrument .op-card.op-card-imported { border-color: #628dc6; border-left: 3px solid #84b6ff; }
+.op-new-mark { color: #a9ceff; font-size: 12px; line-height: 1; font-weight: 700; flex-shrink: 0; }
+#manual-import label { display: block; margin: 6px 0; overflow-wrap: anywhere; }
+#manual-import label[hidden] { display: none; }
+#manual-import input:not([type="checkbox"]), #manual-import textarea { width: 100%; box-sizing: border-box; }
+#manual-import .button { margin: 4px 4px 4px 0; }
+#manual-import blockquote { margin: 6px 0; overflow-wrap: anywhere; }
+#manual-import .manual-candidates details { margin: 8px 0; overflow-wrap: anywhere; }
+
 .instrument .op-group-title {
   color: #8fe8bb;
   background: #16372e;
@@ -40,6 +67,7 @@
 
 .instrument-menu {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding: 7px;
 }
@@ -70,11 +98,13 @@
 
 .op-card .op-info {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .op-name-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
 }
