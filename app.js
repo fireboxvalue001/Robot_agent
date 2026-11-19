@@ -70,6 +70,23 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+let baseManualCatalog = null;
+async function reloadManualCatalog() {
+  const response = await fetch("/api/v1/manual-capabilities/published", { cache: "no-store" });
+  if (!response.ok) throw new Error("无法读取扩展能力库。");
+  const { meta_operations: published, instruments = [] } = await response.json();
+  const baseIds = new Set(baseManualCatalog.meta_operations.map(operation => operation.id));
+  const baseInstruments = baseManualCatalog.instruments || [];
+  const instrumentIds = new Set(baseInstruments.map(instrument => instrument.id));
+  loadMetaOperationLibrary({ ...baseManualCatalog,
+    instruments: [...baseInstruments, ...instruments.filter(instrument => !instrumentIds.has(instrument.id))
+      .map(instrument => ({ ...instrument, manual_device: true }))],
+    meta_operations: [
+    ...baseManualCatalog.meta_operations, ...published.filter(operation => !baseIds.has(operation.id))
+  ] });
+  renderLibrary();
+}
+
 async function initialize() {
   bindStaticEvents();
   try {
@@ -83,10 +100,12 @@ async function initialize() {
     if (!spatialResponse.ok) throw new Error(`空间位置库读取失败：HTTP ${spatialResponse.status}`);
     sourceTree = await treeResponse.json();
     const metaOperationLibrary = await metaResponse.json();
+    baseManualCatalog = metaOperationLibrary;
     const spatialLocationLibrary = await spatialResponse.json();
     buildAtomicIndex();
     loadMetaOperationLibrary(metaOperationLibrary);
     loadSpatialLocationLibrary(spatialLocationLibrary);
+    await reloadManualCatalog().catch(() => { /* Keep the built-in catalog available. */ });
     renderLibrary();
     renderAll();
     const scenarioSelect = $("planner-scenario");
@@ -121,6 +140,7 @@ function loadMetaOperationLibrary(library) {
     name: operation.name,
     category: operation.category,
     instrument_id: operation.instrument_id || null,
+    manual_import: operation.extensions?.manual_import || null,
     related_instrument_ids: operation.extensions?.related_instrument_ids || [],
     description: operation.description,
     status: operation.status,
@@ -326,6 +346,12 @@ function buildLegacyMetaOperationLibrary() {
 
 function bindStaticEvents() {
   $("clarification-checklist")?.addEventListener("click", (event) => {
+    if (event.target.closest?.("[data-fill-draft-defaults]")) {
+      if (localPlanningInProgress) return;
+      const count = fillConfiguredDraftDefaults($("clarification-checklist"));
+      showToast(count ? `已填入${count}项草案默认值，请检查后点击应用；不代表可直接实机执行` : "没有可填入的空白默认项，已填写内容保持不变");
+      return;
+    }
     if (!event.target.closest?.("[data-apply-extraction-fields]")) return;
     if (localPlanningInProgress) return;
     const inputs = [...$("clarification-checklist").querySelectorAll("[data-extraction-field]")].filter(input => input.value.trim());
@@ -333,7 +359,7 @@ function bindStaticEvents() {
     for (const input of inputs) {
       if (!input.checkValidity()) { input.reportValidity(); return; }
     }
-    const values = inputs.map(input => `${input.dataset.label}：${input.dataset.inputType === "number" || !input.dataset.inputType ? Number(input.value) : input.value}${input.dataset.unit}`).join("；");
+    const values = inputs.map(input => `${input.dataset.draftFilled === "true" && input.value === input.dataset.draftDefault ? "【草案默认值】" : ""}${input.dataset.label}：${input.dataset.inputType === "number" || !input.dataset.inputType ? Number(input.value) : input.value}${input.dataset.unit}`).join("；");
     const existing = $("clarification-input").value.trim();
     $("clarification-input").value = [existing, values].filter(Boolean).join("；");
     $("clarification-submit").click();
@@ -1122,7 +1148,12 @@ function generateWorkflowLocally() {
 function renderLibrary() {
   if (!metaOperations.length) return;
   const query = $("library-search").value.trim().toLowerCase();
+  const deviceMatch = /^设备[:：]\s*(.+)$/.exec(query);
+  const selectedDevice = deviceMatch && instrumentDefinitions.find(instrument =>
+    instrument.name.trim().toLowerCase() === deviceMatch[1].trim());
   const matches = (operation) => {
+    if (deviceMatch) return Boolean(selectedDevice) && operation.category === "instrument" &&
+      operation.instrument_id === selectedDevice.id;
     const devices = instrumentDefinitions.filter(instrument =>
       instrument.id === operation.instrument_id || operation.related_instrument_ids.includes(instrument.id));
     const text = [operation.name, operation.meta_operation_id, operation.description, ...operation.aliases,
@@ -1138,9 +1169,11 @@ function renderLibrary() {
       const rightPriority = FOUNDATION_OPERATION_IDS.has(right.meta_operation_id) ? 0 : 1;
       return leftPriority - rightPriority;
     });
-    if (!items.length && !(category === "instrument" && relatedItems.length)) return "";
+    const hasMatchingDevice = category === "instrument" && instrumentDefinitions.some(instrument =>
+      deviceMatch ? instrument === selectedDevice : instrument.manual_device && instrument.name.toLowerCase().includes(query));
+    if (!items.length && !(category === "instrument" && relatedItems.length) && !hasMatchingDevice) return "";
     const content = category === "instrument"
-      ? renderInstrumentGroups(items, Boolean(query), relatedItems)
+      ? renderInstrumentGroups(items, query, relatedItems, selectedDevice?.id)
       : `<ul class="op-list">${items.map(renderMetaOperation).join("")}</ul>`;
     return `
       <details class="op-group ${info.className}" ${query ? "open" : ""}>
@@ -1151,31 +1184,39 @@ function renderLibrary() {
   $("operation-library").innerHTML = categorySections || '<div class="empty">没有匹配的元操作</div>';
 
   document.querySelectorAll(".op-card").forEach((card) => {
+    const addButton = card.querySelector(".op-add");
+    if (!addButton) return;
     card.addEventListener("dragstart", (event) => {
       event.dataTransfer.setData("text/meta-operation", card.dataset.id);
     });
-    card.querySelector(".op-add").addEventListener("click", () => addMetaOperation(card.dataset.id));
+    addButton.addEventListener("click", () => addMetaOperation(card.dataset.id));
   });
 }
 
-function renderInstrumentGroups(items, expandMatches, relatedItems = []) {
+function renderInstrumentGroups(items, query, relatedItems = [], selectedDeviceId) {
   const knownInstrumentIds = new Set(instrumentDefinitions.map((instrument) => instrument.id));
   const groups = [...instrumentDefinitions];
+  const changedDevices = new Set(metaOperations.filter(operation => operation.manual_import).map(operation => operation.instrument_id));
   if (items.some((operation) => !knownInstrumentIds.has(operation.instrument_id))) {
     groups.push({ id: "unassigned", name: "待绑定仪器", description: "尚未指定所属仪器的元操作。" });
   }
   return `<div class="instrument-menu">${groups.map((instrument) => {
+    if (selectedDeviceId && instrument.id !== selectedDeviceId) return "";
     const operations = items.filter((operation) =>
       operation.instrument_id === instrument.id ||
       (instrument.id === "unassigned" && !knownInstrumentIds.has(operation.instrument_id))
     );
     const related = relatedItems.filter(operation => operation.related_instrument_ids.includes(instrument.id));
-    if (!operations.length && !related.length) return "";
+    const empty = !operations.length && !related.length;
+    if (empty && instrument.id !== selectedDeviceId &&
+        !(instrument.manual_device && instrument.name.toLowerCase().includes(query))) return "";
+    const mark = instrument.manual_device || changedDevices.has(instrument.id)
+      ? ' <span class="op-new-mark" title="新登记设备或有新增元操作">新</span>' : "";
     return `
-      <details class="instrument-group" ${expandMatches ? "open" : ""}>
-        <summary><span>${escapeHtml(instrument.name)}</span><span>${operations.length ? `${operations.length} 项` : ""}${related.length ? `${operations.length ? " + " : ""}${related.length} 项关联` : ""}</span></summary>
+      <details class="instrument-group" ${query ? "open" : ""}>
+        <summary><span>${escapeHtml(instrument.name)}${mark}</span><span>${operations.length || empty ? `${operations.length} 项` : ""}${related.length ? `${operations.length ? " + " : ""}${related.length} 项关联` : ""}</span></summary>
         ${instrument.description ? `<p>${escapeHtml(instrument.description)}</p>` : ""}
-        <ul class="op-list">${[...operations, ...related].map(renderMetaOperation).join("")}</ul>
+        ${empty ? "<p>暂无已发布元操作。</p>" : `<ul class="op-list">${[...operations, ...related].map(renderMetaOperation).join("")}</ul>`}
       </details>`;
   }).join("")}</div>`;
 }
@@ -1189,31 +1230,34 @@ function renderMetaOperation(operation) {
     disabled: "已停用"
   };
   return `
-    <li class="op-card" draggable="true" data-id="${escapeHtml(operation.meta_operation_id)}">
+    <li class="op-card${operation.manual_import ? " op-card-imported" : ""}" draggable="${!operation.manual_import}" data-id="${escapeHtml(operation.meta_operation_id)}">
       <div class="op-info">
-        <div class="op-name-row"><strong>${escapeHtml(operation.name)}</strong><span class="op-status">${operation.is_legacy_composite ? "历史组合" : "单步动作"}</span><span class="op-status status-${escapeHtml(operation.status)}">${escapeHtml(statusLabels[operation.status] || operation.status)}</span></div>
+        <div class="op-name-row"><strong>${escapeHtml(operation.name)}</strong>${operation.manual_import
+          ? '<span class="op-new-mark" title="由说明书新增">新</span>'
+          : `<span class="op-status">${operation.is_legacy_composite ? "历史组合" : "单步动作"}</span><span class="op-status status-${escapeHtml(operation.status)}">${escapeHtml(statusLabels[operation.status] || operation.status)}</span>`}</div>
         <details class="operation-details">
-          <summary>${operation.is_legacy_composite ? "查看历史组合与内部操作树" : "查看单步动作说明"}</summary>
+          <summary>${operation.manual_import ? "查看内部操作树" : operation.is_legacy_composite ? "查看历史组合与内部操作树" : "查看单步动作说明"}</summary>
+          ${operation.manual_import ? `<p><b>状态：</b>${operation.manual_import.preview_enabled ? "已入库 · 已启用 VD10 草案预览" : "已入库 · 未启用编排"} · 待实机验证</p>` : ""}
           <p>${escapeHtml(operation.description)}</p>
           ${operation.supported_objects.length ? `<p><b>涉及对象：</b>${escapeHtml(operation.supported_objects.join("、"))}</p>` : ""}
           ${operation.control_requirements.length ? `<p><b>关键控制要求：</b>${escapeHtml(operation.control_requirements.join("；"))}</p>` : ""}
           <p><b>输入：</b>${escapeHtml(operation.input_hint)}</p>
           <p><b>输出：</b>${escapeHtml(operation.output_hint)}</p>
           <div class="operation-tree">
-            <span>${operation.is_legacy_composite ? "历史组合" : "单步动作定义"} · ${operation.internal_operations.length} 个节点</span>
+            <span>${operation.manual_import ? "说明书任务" : operation.is_legacy_composite ? "历史组合" : "单步动作定义"} · ${operation.internal_operations.length} 个节点</span>
           <ol>${operation.internal_operations.map((step) =>
             `<li>${escapeHtml(step.name)}<code>${escapeHtml(step.capability_id)}</code></li>`
           ).join("")}</ol>
           </div>
         </details>
       </div>
-      <button class="op-add" type="button" title="加入任务流程">+</button>
+      ${operation.manual_import ? "" : '<button class="op-add" type="button" title="加入任务流程">+</button>'}
     </li>`;
 }
 
 function appendMetaOperation(metaId, options = {}) {
   const operation = metaIndex.get(metaId);
-  if (!operation) return false;
+  if (!operation || operation.manual_import) return false;
   workflow.push({
     id: createId("step"),
     operation,
@@ -1967,6 +2011,23 @@ function traceDisplayValue(value) {
   return String(value);
 }
 
+function semanticStageStatus(validation) {
+  const present = workflow.length > 0 || isDataCalculationOnly() || Boolean(latestConditionalWorkflow);
+  if (!present) return {label: "待生成", tone: ""};
+  if (conditionalEditorDirty) return {label: "待重新校验", tone: "warn"};
+  if (validation.semanticReady) return {label: isDataCalculationOnly() ? "计算流程已匹配" : "匹配通过", tone: "pass"};
+  const decision = latestReasoningTrace?.decision?.status;
+  const fields = latestConditionalWorkflow?.clarifications || [];
+  const hasError = ["MODEL_ERROR", "UNSUPPORTED", "LOGICAL_BLOCKED"].includes(decision) ||
+    fields.some(item => item.kind === "issue") ||
+    latestConditionalWorkflow?.nodes?.some(node => node.status === "unsupported");
+  if (hasError) return {label: "存在问题", tone: "error"};
+  if (fields.some(item => item.kind === "parameter")) return {label: isDataCalculationOnly() ? "待补数据" : "待补参数", tone: "warn"};
+  if (fields.some(item => item.kind === "method")) return {label: "待补方法信息", tone: "warn"};
+  if (decision === "NEEDS_REVIEW") return {label: "待审核确认", tone: "warn"};
+  return {label: "存在问题", tone: "error"};
+}
+
 function renderFlow(validation) {
   const calculationOnly = isDataCalculationOnly();
   $("simulate-execution").disabled = Boolean(latestConditionalWorkflow);
@@ -1978,14 +2039,21 @@ function renderFlow(validation) {
     $("semantic-flow").innerHTML = `<li class="empty" role="status"><strong>已生成 ${calculations.length} 个软件计算步骤</strong><p>${calculations.map(node => escapeHtml(node.label)).join("；")}</p><p>本任务仅处理已有数据，无需添加机器人或仪器元操作；输入数据、依赖与计算规则见顶部流程。</p></li>`;
   }
   const globalIssues = validation.issues.filter((issue) => !issue.id && !issue.physical);
-  if (globalIssues.length) {
-    $("semantic-flow").innerHTML = `<li class="empty" role="status">${globalIssues.map((issue) => escapeHtml(issue.message)).join("<br>")}</li>` + $("semantic-flow").innerHTML;
+  const status = semanticStageStatus(validation);
+  const clarificationInC1 = latestConditionalWorkflow?.clarifications?.length && !conditionalEditorDirty && status.tone !== "error";
+  if (globalIssues.length && !clarificationInC1) {
+    const detail = globalIssues.map(issue => `<p>${escapeHtml(issue.message)}</p>`).join("");
+    $("semantic-flow").innerHTML = `<li class="flow-validation-notice" role="status"><strong>${escapeHtml(status.label)}</strong>${detail}</li>` + $("semantic-flow").innerHTML;
   }
   $("physical-flow").innerHTML = workflow.map((step, index) =>
     renderFlowCard(step, index, validation, true)
   ).join("");
   if (calculationOnly) {
     $("physical-flow").innerHTML = '<li class="empty" role="status">本任务仅使用已有数据进行软件计算，无需机械臂、加热或称量动作。测量来源、单位和数据有效性仍须核对；此提示不表示已经完成计算或生成实验结果。</li>';
+  }
+  if (latestConditionalWorkflow?.physical_requirements?.length) {
+    const requirements = latestConditionalWorkflow.physical_requirements;
+    $("physical-flow").innerHTML = `<li class="flow-validation-notice"><details><summary>设备与现场条件待确认（${requirements.length}组）</summary>${requirements.map(item => `<article><p><b>${escapeHtml(item.label)}</b></p><p>${escapeHtml(item.instruction)}</p><ul>${(item.checks || []).map(check => `<li>${escapeHtml(check)}</li>`).join("")}</ul></article>`).join("")}</details></li>` + $("physical-flow").innerHTML;
   }
 
   document.querySelectorAll(".flow-remove").forEach((button) => {
@@ -2016,13 +2084,9 @@ function renderFlow(validation) {
     });
   });
 
-  $("semantic-state").textContent = calculationOnly
-    ? (validation.semanticReady ? "计算流程已匹配" : latestConditionalWorkflow.clarifications?.some(item => item.kind === "parameter") ? "待补数据" : "存在问题")
-    : workflow.length
-    ? (validation.semanticReady ? "匹配通过" : conditionalEditorDirty ? "待重新校验" : "存在问题")
-    : "待生成";
-  $("semantic-state").className =
-    `check-state ${workflow.length || calculationOnly ? (validation.semanticReady ? "pass" : "error") : ""}`;
+  const semanticStatus = semanticStageStatus(validation);
+  $("semantic-state").textContent = semanticStatus.label;
+  $("semantic-state").className = `check-state ${semanticStatus.tone}`;
   $("physical-state").textContent = calculationOnly ? "无需物理元操作" : workflow.length
     ? (validation.physicalReady ? "校验通过" : "待确认")
     : "待校验";

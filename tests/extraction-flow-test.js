@@ -65,6 +65,14 @@ workflow.clarifications = [
 ];
 const checklist = context.renderExtractionClarifications(workflow);
 assert(checklist.includes("1 项参数 · 1 项其他待处理"));
+assert.strictEqual((checklist.match(/方法尚未审核/g)||[]).length, 1);
+const methodOnly = context.renderConfiguredClarifications({clarifications:[workflow.clarifications[1]]});
+assert(methodOnly.includes("本次需要补充什么"));
+const usageOnly = context.renderConfiguredClarifications({clarifications:[],usage_prerequisites:[
+  {label:"挥发流程",instruction:"使用前确认适用性",checks:["标准适用范围"]}]});
+assert(usageOnly.includes("流程使用前提与注意事项") && usageOnly.includes("不阻断编排"));
+assert(!usageOnly.includes('clarification-method-review" open'));
+assert(!usageOnly.includes("待方法审核"));
 assert(checklist.includes('<details class="clarification-checklist-details">'));
 assert(!checklist.includes('<details class="clarification-checklist-details" open'), "Checklist must be collapsed by default");
 assert(checklist.includes('data-extraction-field="extraction_hours"'));
@@ -82,3 +90,19 @@ generic.clarifications = [{kind:"parameter",field:"mode",type:"string",label:"�
 const genericForm = context.renderConfiguredClarifications(generic);
 assert(genericForm.includes('<select') && genericForm.includes('value="遮光"') && genericForm.includes('value="是"'));
 console.log("leather extraction flow rendering test passed");
+
+generic.clarifications[0].draft_default = "常规";
+generic.clarifications[0].draft_default_note = "草案示例，待核对";
+const defaultsHtml = context.renderConfiguredClarifications(generic);
+assert(defaultsHtml.includes('data-fill-draft-defaults'));
+assert(defaultsHtml.includes('data-draft-default="常规"'));
+assert(!defaultsHtml.includes('data-draft-default="true"'));
+assert(!defaultsHtml.includes('selected'), "Defaults must not be selected before user action");
+const field = (value, draftDefault, valid = true) => ({value, dataset:{draftDefault}, checkValidity:()=>valid});
+const blank = field("", "30"), edited = field("60", "30"), invalid = field("", "-1", false);
+assert.strictEqual(context.fillConfiguredDraftDefaults({querySelectorAll:()=>[blank, edited, invalid]}), 1);
+assert.strictEqual(blank.value, "30");
+assert.strictEqual(blank.dataset.draftFilled, "true");
+assert.strictEqual(edited.value, "60");
+assert.strictEqual(invalid.value, "");
+assert.strictEqual(context.fillConfiguredDraftDefaults({querySelectorAll:()=>[blank, edited]}), 0);

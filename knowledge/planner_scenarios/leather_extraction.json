@@ -189,7 +189,9 @@
       "anchors": [
         "剪切"
       ],
-      "integer": true
+      "integer": true,
+      "draft_default": 100,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "max_collection_actions": {
       "label": "碎屑收集最大次数",
@@ -200,7 +202,9 @@
         "碎屑",
         "收集"
       ],
-      "integer": true
+      "integer": true,
+      "draft_default": 20,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "sample_dry_temperature_c": {
       "label": "皮样干燥温度",
@@ -363,7 +367,9 @@
         "空抽提瓶"
       ],
       "integer": false,
-      "instruction": "修订稿仅给出空瓶首次6 h，未明确复烘时长。请依据确认的方法补充，不自动套用其他阶段。"
+      "instruction": "修订稿仅给出空瓶首次6 h，未明确复烘时长。请依据确认的方法补充，不自动套用其他阶段。",
+      "draft_default": 60,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "final_threshold_mg": {
       "label": "最终恒重阈值",
@@ -399,7 +405,9 @@
         "二氯甲烷"
       ],
       "integer": false,
-      "instruction": "填写设备与方法允许的单次计量加液量，不是预计总用量；首次虹吸及半高由液位反馈判定，总加入量需累计且不得超过设备容量。"
+      "instruction": "填写设备与方法允许的单次计量加液量，不是预计总用量；首次虹吸及半高由液位反馈判定，总加入量需累计且不得超过设备容量。",
+      "draft_default": 10,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "max_doses": {
       "label": "单阶段加液最大次数",
@@ -410,7 +418,9 @@
         "加液"
       ],
       "integer": true,
-      "instruction": "由维护者确认单阶段加液次数保护上限；达到上限停下复核，不能以次数或时间代替液位检查。"
+      "instruction": "由维护者确认单阶段加液次数保护上限；达到上限停下复核，不能以次数或时间代替液位检查。",
+      "draft_default": 20,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "bath_temperature_c": {
       "label": "抽提工位加热温度",
@@ -421,7 +431,9 @@
         "抽提",
         "加热"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 60,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "minimum_reflux_cycles": {
       "label": "最低回流循环次数",
@@ -443,7 +455,9 @@
       "anchors": [
         "抽提"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 8,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "evaporation_temperature_c": {
       "label": "挥发除溶剂加热温度",
@@ -455,7 +469,9 @@
         "溶剂去除"
       ],
       "integer": false,
-      "instruction": "需与已审核实际挥发方法及原工位一致。填写温度不能批准方法或确认设备适用性。"
+      "instruction": "需与已审核实际挥发方法及原工位一致。填写温度不能批准方法或确认设备适用性。",
+      "draft_default": 40,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "monitor_minutes": {
       "label": "回流检查间隔",
@@ -466,7 +482,9 @@
         "回流",
         "检查间隔"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 1,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "cool_limit_c": {
       "label": "允许拆卸温度上限",
@@ -476,7 +494,9 @@
       "anchors": [
         "拆卸"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 30,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "max_cycles": {
       "label": "恒重最大循环次数",
@@ -486,7 +506,9 @@
       "anchors": [
         "循环"
       ],
-      "integer": true
+      "integer": true,
+      "draft_default": 5,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "cool_timeout_minutes": {
       "label": "冷却最长等待时长",
@@ -496,7 +518,9 @@
       "anchors": [
         "冷却"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 60,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "residue_dry_temperature_c": {
       "label": "萃取物干燥温度",
@@ -546,7 +570,9 @@
         "冷却"
       ],
       "integer": false,
-      "instruction": "修订稿给出萃取物首轮冷却30 min，但未明确复烘后冷却时长；请按确认条件补充。"
+      "instruction": "修订稿给出萃取物首轮冷却30 min，但未明确复烘后冷却时长；请按确认条件补充。",
+      "draft_default": 30,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "solvent_timeout_minutes": {
       "label": "溶剂去除最长时长",
@@ -556,7 +582,9 @@
       "anchors": [
         "溶剂去除"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 120,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     },
     "siphon_timeout_minutes": {
       "label": "单次虹吸完成最长等待",
@@ -566,7 +594,9 @@
       "anchors": [
         "虹吸"
       ],
-      "integer": false
+      "integer": false,
+      "draft_default": 10,
+      "draft_default_note": "系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。"
     }
   },
   "nodes": [

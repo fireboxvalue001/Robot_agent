@@ -4,26 +4,42 @@ function extractionEscape(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
 
+function fillConfiguredDraftDefaults(container) {
+  let filled = 0;
+  for (const input of container.querySelectorAll("[data-extraction-field][data-draft-default]")) {
+    if (input.value.trim()) continue;
+    input.value = input.dataset.draftDefault;
+    if (!input.checkValidity()) { input.value = ""; continue; }
+    input.dataset.draftFilled = "true";
+    filled++;
+  }
+  return filled;
+}
+
 function renderConfiguredClarifications(definition) {
   const esc = extractionEscape;
   const entries = definition.clarifications || [];
   const parameters = entries.filter(item => item.kind === "parameter");
   const blockers = entries.filter(item => item.kind !== "parameter");
-  if (!entries.length) return '<p class="clarification-complete">本次没有待补参数；设备与现场条件仍需独立确认。</p>';
+  const prerequisites = (definition.usage_prerequisites || []).length ? `<details class="clarification-checklist-details clarification-method-review"><summary class="clarification-checklist-heading"><strong>流程使用前提与注意事项</strong><span>不阻断编排 · 点击展开</span></summary><div class="clarification-checklist-body">${definition.usage_prerequisites.map(item => `<article><b>${esc(item.label)}</b><p>${esc(item.instruction)}</p>${item.checks?.length ? `<ul>${item.checks.map(check => `<li>${esc(check)}</li>`).join("")}</ul>` : ""}</article>`).join("")}</div></details>` : "";
+  if (!entries.length) return '<p class="clarification-complete">本次没有待补参数；设备与现场条件仍需独立确认。</p>' + prerequisites;
   return `<details class="clarification-checklist-details"><summary class="clarification-checklist-heading"><strong>本次需要补充什么</strong><span>${parameters.length} 项参数 · ${blockers.length} 项其他待处理 · 点击展开</span></summary><div class="clarification-checklist-body">
-    <p>可以直接在下方填写，支持分批提交。单位已标明；数值须由实验负责人或已审核方法确认。</p>
+    <p>可以直接填写或选择草案默认值，检查后再应用。默认值仅用于快速完善编排草案，不代表方法已审核、设备已就绪或已获得实测数据。</p>
+    ${parameters.some(item => item.draft_default !== undefined && item.type !== "boolean") ? '<div class="clarification-checklist-actions"><button class="button" type="button" data-fill-draft-defaults>填入编排草案默认值</button><small>只填空白项，请核对后再点击下方“应用”。</small></div>' : ""}
     ${blockers.map(item => `<article class="clarification-blocker"><b>${esc(item.label)}</b><p>${esc(item.instruction)}</p>${item.questions?.length ? `<ul>${item.questions.map(question => `<li>${esc(question)}</li>`).join("")}</ul>` : ""}${item.configuration_notice ? `<p><b>系统配置：</b>${esc(item.configuration_notice)}</p>` : ""}${item.format ? `<small>处理完成后填写：${esc(item.format)}</small>` : ""}</article>`).join("")}
     ${parameters.length ? `<div class="clarification-fields">${parameters.map((item, index) => {
       const steps = [...new Set(item.related_steps || [])];
       const inputType = item.type || "number";
-      const attributes = `id="extraction-field-${index}" data-extraction-field="${esc(item.field)}" data-label="${esc(item.label)}" data-unit="${esc(item.unit || "")}" data-input-type="${esc(inputType)}"`;
+      const hasDefault = item.draft_default !== undefined && inputType !== "boolean";
+      const attributes = `id="extraction-field-${index}" data-extraction-field="${esc(item.field)}" data-label="${esc(item.label)}" data-unit="${esc(item.unit || "")}" data-input-type="${esc(inputType)}"${hasDefault ? ` data-draft-default="${esc(item.draft_default)}"` : ""}`;
       const choices = item.enum || (inputType === "boolean" ? ["是", "否"] : null);
       const input = choices ? `<select ${attributes}><option value="">请选择确认值</option>${choices.map(value => `<option value="${esc(typeof value === "boolean" ? value ? "是" : "否" : value)}">${esc(typeof value === "boolean" ? value ? "是" : "否" : value)}</option>`).join("")}</select>`
         : `<input ${attributes} type="${inputType === "number" ? "number" : "text"}" ${item.minimum !== undefined ? `min="${esc(item.minimum)}"` : ""} ${item.maximum !== undefined ? `max="${esc(item.maximum)}"` : ""} step="${item.integer ? "1" : "any"}" placeholder="请填写确认值">`;
       return `<label class="clarification-field" for="extraction-field-${index}"><b>${esc(item.label)}</b><small>用于：${esc(steps.slice(0, 2).join("、"))}${steps.length > 2 ? `等${steps.length}处` : ""}</small>
         <span class="clarification-number">${input}<span>${esc(item.unit || "")}</span></span>
+        <small>${hasDefault ? `草案默认值：${esc(item.draft_default)} ${esc(item.unit || "")}；${esc(item.draft_default_note || "需核对后使用")}` : "需自行补充：实际测量值、对象标识及确认事项不自动生成。"}</small>
         <small>文字填写格式：${esc(item.format)}</small></label>`;
-    }).join("")}</div><div class="clarification-checklist-actions"><button class="button primary" type="button" data-apply-extraction-fields>应用已填写项并重新编排</button><small>空白项保持待补充，不会自动填入默认值。</small></div>` : ""}</div></details>`;
+    }).join("")}</div><div class="clarification-checklist-actions"><button class="button primary" type="button" data-apply-extraction-fields>应用已填写项并重新编排</button><small>仅填空白项，不覆盖已填写内容；填入后仍可修改，点击应用才提交。不代替方法审批和物理条件确认。</small></div>` : ""}</div></details>${prerequisites}`;
 }
 
 function renderConfiguredWorkflow(definition) {
@@ -52,7 +68,7 @@ function renderConfiguredWorkflow(definition) {
         const next = node.next ? `<small>↓ ${esc(labels.get(node.next) || node.next)}</small>` : "";
         const params = (node.requires || []).map((key) => {
           const binding = definition.parameters[key];
-          return binding ? `${binding.label || key}=${binding.value}${binding.unit || ""}（${binding.source === "provided_document" ? "实验文档" : binding.source === "user_supplement" ? "用户补充方案" : "用户输入"}）` : `待补充：${node.reason.replace("待补充：", "")}`;
+          return binding ? `${binding.label || key}=${binding.value}${binding.unit || ""}（${binding.source === "draft_default" ? "编排草案默认值，待审核" : binding.source === "provided_document" ? "实验文档" : binding.source === "user_supplement" ? "用户补充方案" : "用户输入"}）` : `待补充：${node.reason.replace("待补充：", "")}`;
         });
         return `<article class="extraction-node ${node.status === "covered" ? "matched" : "missing"}${isCheck ? " condition" : ""}">
           <div class="extraction-node-title"><span>${isCheck ? "◇ 判断" : node.kind === "compute" ? "计算" : node.kind === "monitored_hold" ? "持续监测" : "操作"}</span><b>${esc(call.title)}</b></div>
@@ -69,6 +85,7 @@ function renderConfiguredWorkflow(definition) {
   const scopeNotice = scope?.mode === "needs_selection"
     ? '<p class="chip chip-warning">尚未确定本次操作范围，请在C1待补清单中选择；当前不会生成完整实验流程。</p>' : "";
   return `<div class="extraction-workflow">${scopeNotice}
+    ${Object.values(definition.parameters || {}).some(item => item.source === "draft_default") ? '<p class="chip chip-warning">本流程含编排草案默认值，使用前需按设备与方法核对；不可据此直接实机执行。</p>' : ""}
     ${renderConfiguredDiagram(groups, definition)}
     <details><summary>展开各阶段的单步动作、参数和分支</summary><div class="extraction-overview">${phaseItems}</div></details><details><summary>待绑定的设备与执行配置</summary>${definition.resources.map((resource) => `<p>${esc(resource.name || resource.id)}：${resource.type === "screen_adapter_profile" ? esc(resource.notice) : `${esc(resource.device_id || "设备待绑定")} / ${esc(resource.location_id || "位置待登记")}`}</p>`).join("")}</details>
     <details><summary>结构化流程定义（交接用）</summary><pre>${esc(JSON.stringify(definition, null, 2))}</pre></details></div>`;

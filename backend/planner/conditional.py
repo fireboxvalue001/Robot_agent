@@ -75,6 +75,10 @@ def validate_scenario(scenario, root=ROOT):
             parameter_value(spec["default"], spec)
             if not spec.get("document_quote"):
                 raise ValueError(f"默认值{key}缺少来源")
+        if "draft_default" in spec:
+            parameter_value(spec["draft_default"], spec)
+            if not spec.get("draft_default_note") or spec.get("type") == "boolean":
+                raise ValueError(f"草案默认值{key}必须说明来源且不能代替状态确认")
 
 
 def _method_requirements(scenario, resources, text):
@@ -87,19 +91,23 @@ def _method_requirements(scenario, resources, text):
         if len(records) != len(resources.get(rule["collection"], [])):
             raise ValueError("方法登记ID重复")
         method = records.get(selected)
-        valid = bool(method and method.get("review_status") == "approved" and all(method.get(k) == v for k, v in rule.get("constraints", {}).items()))
+        compatible = bool(method and all(method.get(k) == v for k, v in rule.get("constraints", {}).items()))
         described = bool(method and method.get("description_status") == "provided")
-        results[rule["id"]] = {"selected_id": selected, "record": method, "valid": valid}
+        approved = bool(method and method.get("review_status") == "approved")
+        valid = compatible and (described or approved) and method.get("review_status") not in {"rejected", "disabled", "withdrawn"}
+        results[rule["id"]] = {"selected_id": selected, "record": method, "valid": valid,
+                               "approved": approved, "compatible": compatible}
         if len(unique) > 1:
             issues.append({"code": "PARAMETER_CONFLICT", "message": f"{rule['selection_label']}出现多个值"})
         if not valid:
             labels = rule["clarification"]
-            issues.append({"code": "METHOD_NEEDS_REVIEW" if described else "METHOD_NOT_REGISTERED", "message": labels["described_label"] if described else labels["missing_label"]})
-            clarifications.append({"kind": "method", "field": rule["id"], "label": labels["described_label"] if described else labels["missing_label"],
+            message = "所选方法与当前流程不兼容，请选择符合本流程的已登记方法" if method and not compatible else "方法信息不完整，请补充或选择已登记的方法"
+            issues.append({"code": "METHOD_NOT_REGISTERED", "message": message})
+            clarifications.append({"kind": "method", "field": rule["id"], "label": message,
                 "related_steps": [n["label"] for n in scenario["nodes"] if n.get("method_requirement") == rule["id"]],
-                "instruction": labels["described_instruction"] if described else labels["missing_instruction"],
+                "instruction": "请核对输入的方法ID及适用范围；不凭空生成未登记的方法。",
                 "questions": method.get("pending_confirmation", []) if described else labels.get("questions", []),
-                "configuration_notice": labels["review_notice"], "format": labels.get("format", "")})
+                "format": f"{rule['selection_label']}：已登记方法ID"})
     return results, issues, clarifications
 
 
@@ -196,7 +204,7 @@ def plan_conditional(request, model, root=ROOT):
         if (node["kind"] == "action" and not node.get("operation_id")) or (node.get("operation_id") and (not op or op["status"] == "disabled")):
             node.update(status="unsupported", reason="操作尚未登记或已停用")
         elif method and not method["valid"]:
-            node.update(status="needs_input", reason="方法已说明但仍待审核确认" if method["record"] else "需登记并审核指定方法")
+            node.update(status="needs_input", reason="需补充有效且与当前流程兼容的已登记方法")
         elif absent:
             node.update(status="needs_input", reason="待补充：" + "、".join(specs[k]["label"] for k in absent))
         else:
@@ -213,6 +221,7 @@ def plan_conditional(request, model, root=ROOT):
     fields = [{"kind": "parameter", "field": k, "label": specs[k]["label"], "unit": specs[k].get("unit", ""),
                "type": specs[k].get("type", "number"), "integer": specs[k].get("integer", False),
                **{p: specs[k][p] for p in ("minimum", "maximum", "enum") if p in specs[k]},
+               **{p: specs[k][p] for p in ("draft_default", "draft_default_note") if p in specs[k]},
                "related_steps": [n["label"] for n in nodes if k in n.get("requires", [])],
                "instruction": specs[k].get("instruction", "根据已审核方法或由负责人确认后填写，不使用猜测值。"),
                "format": f"{specs[k]['label']}：{'数值' if specs[k].get('type', 'number') == 'number' else '是或否' if specs[k]['type'] == 'boolean' else '内容'}{specs[k].get('unit', '')}"} for k in missing]
@@ -225,6 +234,17 @@ def plan_conditional(request, model, root=ROOT):
                 "parameters": values, "clarifications": fields, "resources": resources.get("resources", []),
                 "method": next((m["record"] for m in methods.values()), None), "methods": methods,
                 "limits": scenario.get("limits", {}), "execution_allowed": False}
+    workflow["usage_prerequisites"] = [{"method_id": item["selected_id"],
+        "label": item["record"].get("name", item["selected_id"]),
+        "instruction": "此方法仅作为编排依据。实际使用前须由实验负责人确认方法适用性及实验条件；流程匹配不代表实机可执行。",
+        "checks": [check for check in item["record"].get("pending_confirmation", []) if re.search("标准|批准|审核", check)],
+        "review_status": item["record"].get("review_status", "draft")}
+        for item in methods.values() if item["valid"]]
+    workflow["physical_requirements"] = [{"method_id": item["selected_id"],
+        "label": item["record"].get("name", item["selected_id"]), "status": "pending",
+        "checks": [check for check in item["record"].get("pending_confirmation", []) if not re.search("标准|批准|审核", check)],
+        "instruction": "执行前核对设备适用性、现场状态、反馈与停止接口；未接入真实设备校验，不可自动判定通过。"}
+        for item in methods.values() if item["valid"]]
     if scenario.get("planning_context"):
         workflow["planning_context"] = scenario["planning_context"]
     if task_scope:
@@ -237,7 +257,7 @@ def plan_conditional(request, model, root=ROOT):
     unsupported = any(n["status"] == "unsupported" for n in nodes) or bool(unresolved)
     method_pending = any(not m["valid"] for m in methods.values())
     status = ("model_error" if model_failed else "conflict" if conflict else "unsupported" if unsupported
-              else "needs_review" if errors or review_required or (not missing and any(not m["valid"] and m["record"] and m["record"].get("description_status") == "provided" for m in methods.values()))
+              else "needs_review" if errors or review_required
               else "needs_input" if missing or method_pending else "logical_pass")
     passed = status == "logical_pass"
     message = (f"{scenario['name']}逻辑流程检查通过，等待设备及现场条件确认" if passed else

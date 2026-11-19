@@ -28,6 +28,36 @@ context.renderLibrary();
 assert.match(get("operation-library").innerHTML, /空容器放上天平后将读数归零/);
 assert.match(get("operation-library").innerHTML, /data-id="robot.meta.read_balance_mass"/);
 get("library-search").value = "";
+const importedId = "vd10.meta.manual_test";
+context.importedLibrary = { ...library, meta_operations: [...library.meta_operations, {
+  ...library.meta_operations.find(op => op.id === "vd10.meta.prepare_test"),
+  id: importedId, name: "说明书新增测试动作", status: "pending_verification", execution_policy: "interface_only",
+  extensions: { manual_import: { preview_enabled: false } }
+}] };
+vm.runInContext("loadMetaOperationLibrary(importedLibrary)", context);
+get("library-search").value = "说明书新增测试动作";
+context.renderLibrary();
+assert.match(get("operation-library").innerHTML, /draggable="false" data-id="vd10.meta.manual_test"/);
+assert.match(get("operation-library").innerHTML, /op-card-imported/);
+assert.match(get("operation-library").innerHTML, /VD10自动蒸馏测定仪 <span class="op-new-mark"/);
+assert.match(get("operation-library").innerHTML, /class="op-new-mark"[^>]*>新</);
+assert.match(get("operation-library").innerHTML, /<details class="operation-details">\s*<summary>[^<]+<\/summary>\s*<p><b>状态：<\/b>已入库 · 未启用编排/);
+assert(!get("operation-library").innerHTML.includes('class="op-add"'));
+assert.strictEqual(context.appendMetaOperation(importedId), false);
+get("library-search").value = "";
+vm.runInContext("loadMetaOperationLibrary(library)", context);
+context.newDeviceLibrary = { ...library, instruments: [...library.instruments,
+  { id: "manual_device_test", name: "新增空设备", manual_device: true }] };
+vm.runInContext("loadMetaOperationLibrary(newDeviceLibrary)", context);
+get("library-search").value = "新增空设备";
+context.renderLibrary();
+assert.match(get("operation-library").innerHTML, /新增空设备 <span class="op-new-mark"[^>]*>新<\/span><\/span><span>0 项/);
+get("library-search").value = "设备:新增空设备";
+context.renderLibrary();
+assert.match(get("operation-library").innerHTML, /新增空设备.*0 项/);
+assert(!get("operation-library").innerHTML.includes("VD10自动蒸馏测定仪"));
+get("library-search").value = "";
+vm.runInContext("loadMetaOperationLibrary(library)", context);
 const definition = { ...scene, parameters: {}, nodes: scene.nodes.map(node => ({ ...node,
   status: "covered", reason: "尚未执行", arguments: node.input_bindings || {},
   ...(node.operation_id ? { operation_version: byId.get(node.operation_id).version } : {}) })) };
@@ -90,4 +120,44 @@ calculation.nodes[0].check={type:"physical_device_guard"};
 context.receivePlannerResult({status:"needs_input",workflow_definition:calculation,
   reasoning_trace:{validation:{},decision:{logical_executable:false}}});
 assert.equal(context.isDataCalculationOnly(),false,"Unknown physical checks cannot be exempted");
-console.log("Conditional editor: original draggable cards, C2-only projection, physical mirror and dirty-state tests passed");
+const reviewDefinition = structuredClone(definition);
+reviewDefinition.clarifications = [{kind:"method", label:"实际挥发流程已说明；原加热工位、通风与方法审核待确认",
+  instruction:"无需重复说明方法。", questions:["原工位是否适用？"], configuration_notice:"维护者需审核方法。"}];
+reviewDefinition.nodes[0].status = "needs_input";
+reviewDefinition.nodes[0].reason = "方法已说明但仍待审核确认";
+context.receivePlannerResult({status:"failed",workflow_definition:reviewDefinition,
+  reasoning_trace:{validation:{},decision:{status:"NEEDS_REVIEW",logical_executable:false}}});
+context.renderFlow(context.validateWorkflow());
+assert.equal(get("semantic-state").textContent, "待补方法信息");
+assert.equal(get("semantic-state").className, "check-state warn");
+assert(!get("semantic-flow").innerHTML.includes("原工位是否适用？"));
+assert(!get("semantic-flow").innerHTML.includes('class="flow-validation-notice"'));
+assert.equal((get("semantic-flow").innerHTML.match(/draggable="true"/g)||[]).length, 3);
+assert.equal(context.validateWorkflow().semanticReady,false);
+assert.equal(context.validateWorkflow().physicalReady,false);
+reviewDefinition.clarifications.unshift({kind:"parameter",label:"等待时长"});
+context.receivePlannerResult({status:"failed",workflow_definition:reviewDefinition,
+  reasoning_trace:{validation:{},decision:{status:"NEEDS_INPUT",logical_executable:false}}});
+context.renderFlow(context.validateWorkflow());
+assert.equal(get("semantic-state").textContent,"待补参数");
+assert(!get("semantic-flow").innerHTML.includes('class="flow-validation-notice"'));
+assert(!get("semantic-flow").innerHTML.includes("等待时长"));
+assert.equal((get("semantic-flow").innerHTML.match(/draggable="true"/g)||[]).length, 3);
+context.receivePlannerResult({status:"failed",workflow_definition:reviewDefinition,
+  reasoning_trace:{validation:{},decision:{status:"MODEL_ERROR",logical_executable:false}}});
+context.renderFlow(context.validateWorkflow());
+assert.equal(get("semantic-state").textContent,"存在问题");
+assert.equal(get("semantic-state").className,"check-state error");
+const draftDefinition = structuredClone(definition);
+draftDefinition.physical_requirements = [{label:"挥发去除",instruction:"执行前确认设备与通风",checks:["停止接口可用"],status:"pending"}];
+draftDefinition.usage_prerequisites = [{label:"挥发去除",instruction:"实际使用前确认适用性"}];
+context.receivePlannerResult({status:"success",workflow_definition:draftDefinition,
+  reasoning_trace:{validation:{},decision:{status:"PHYSICAL_PENDING",logical_executable:true}}});
+context.renderFlow(context.validateWorkflow());
+assert.equal(get("semantic-state").textContent,"匹配通过");
+assert(get("physical-flow").innerHTML.includes("停止接口可用"));
+assert(!get("semantic-flow").innerHTML.includes("停止接口可用"));
+assert.equal(get("physical-state").textContent,"待确认");
+assert.equal(context.validateWorkflow().physicalReady,false);
+assert.equal(get("simulate-execution").disabled,true);
+console.log("Conditional editor: draggable cards, review versus errors, physical safety and dirty-state tests passed");

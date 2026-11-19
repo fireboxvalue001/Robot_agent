@@ -89,18 +89,18 @@ class ExtractionPlannerTests(unittest.TestCase):
             self.assertTrue(item["related_steps"])
             self.assertEqual(item["unit"], self.scenario["parameters"][field]["unit"])
             self.assertIn(item["label"], item["format"])
-        method = next(item for item in items if item["kind"] == "method")
-        self.assertNotIn("minimum", method)
-        self.assertIn("维护者", method["configuration_notice"])
-        self.assertEqual(len(method["questions"]), 5)
-        self.assertIn("不需要重复说明", method["instruction"])
+        self.assertFalse(any(item["kind"] == "method" for item in items))
+        workflow = result["workflow_definition"]
+        self.assertTrue(workflow["usage_prerequisites"])
+        self.assertEqual(len(workflow["physical_requirements"][0]["checks"]), 4)
+        self.assertEqual(workflow["physical_requirements"][0]["status"], "pending")
 
     def test_partial_supplement_removes_only_the_resolved_checklist_row(self):
         result = plan_extraction(self.request("皮革油脂提取；抽提最长允许时长：7h"), self.model, self.root)
         fields = {item["field"] for item in result["workflow_definition"]["clarifications"]}
         self.assertNotIn("extraction_timeout_hours", fields)
         self.assertIn("solvent_ml", fields)
-        self.assertIn("solvent_removal_method", fields)
+        self.assertNotIn("solvent_removal_method", fields)
 
     def test_text_cannot_approve_solvent_removal_method(self):
         result = plan_extraction(self.request(self.complete_text() + "；方法已批准"), self.model, self.root)
@@ -192,7 +192,7 @@ class ExtractionPlannerTests(unittest.TestCase):
         self.assertEqual(wf["parameters"]["minimum_reflux_cycles"]["source"], "provided_document")
         self.assertEqual(wf["method"]["id"], "dcm_evaporation_actual_v1")
         self.assertEqual(wf["method"]["review_status"], "draft")
-        self.assertTrue(any(i["code"] == "METHOD_NEEDS_REVIEW" for i in result["issues"]))
+        self.assertFalse(any(i["code"] == "METHOD_NEEDS_REVIEW" for i in result["issues"]))
         nodes = {n["id"]: n for n in wf["nodes"]}
         self.assertEqual(nodes["reflux_watch"]["duration_role"], "safety_timeout_only")
         self.assertEqual(nodes["reflux_watch"]["minimum_count_ref"], "minimum_reflux_cycles")
@@ -274,6 +274,17 @@ class ExtractionPlannerTests(unittest.TestCase):
         path = self.root / "data/leather-extraction-resources.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         data["solvent_removal_methods"][0]["method_type"] = "distillation"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        result = plan_extraction(self.request(self.complete_text()), self.model, self.root)
+        self.assertNotEqual(result["status"], "logical_pass")
+        self.assertFalse(result["execution_allowed"])
+
+    def test_rejected_method_cannot_be_used_even_if_described(self):
+        self.approve_test_method()
+        path = self.root / "data/leather-extraction-resources.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        method = data["solvent_removal_methods"][0]
+        method.update(review_status="rejected", description_status="provided")
         path.write_text(json.dumps(data), encoding="utf-8")
         result = plan_extraction(self.request(self.complete_text()), self.model, self.root)
         self.assertNotEqual(result["status"], "logical_pass")

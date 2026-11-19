@@ -174,6 +174,20 @@ def build():
     }.items():
         parameters[key]["instruction"] = instruction
 
+    # Draft planning examples, never document requirements or hardware settings.
+    draft_defaults = {
+        "max_cut_actions": 100, "max_collection_actions": 20,
+        "empty_repeat_dry_minutes": 60, "solvent_ml": 10, "max_doses": 20,
+        "bath_temperature_c": 60, "extraction_timeout_hours": 8,
+        "evaporation_temperature_c": 40, "monitor_minutes": 1,
+        "cool_limit_c": 30, "max_cycles": 5, "cool_timeout_minutes": 60,
+        "residue_repeat_cool_minutes": 30, "solvent_timeout_minutes": 120,
+        "siphon_timeout_minutes": 10,
+    }
+    for key, value in draft_defaults.items():
+        parameters[key].update(draft_default=value,
+            draft_default_note="系统编排草案示例，非标准规定或设备推荐值；须按设备容量、方法和现场条件核对，未经审核不得用于实机。")
+
     nodes = []
     def add(node_id, label, op=None, requires=(), kind="action", **extra):
         node = {"id": node_id, "label": label, "kind": kind, "requires": list(requires), **extra}

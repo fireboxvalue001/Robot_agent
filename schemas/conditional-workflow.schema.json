@@ -13,6 +13,8 @@
     "planning_context": {"type": "object"},
     "phases": {"type": "array", "items": {"type": "object", "required": ["id", "label"]}},
     "methods": {"type": "object"},
+    "usage_prerequisites": {"type": "array", "items": {"type": "object", "required": ["method_id", "label", "instruction"]}},
+    "physical_requirements": {"type": "array", "items": {"type": "object", "required": ["method_id", "label", "status", "checks", "instruction"], "properties": {"status": {"const": "pending"}, "checks": {"type": "array", "items": {"type": "string"}}}}},
     "entry": {"type": "string"},
     "parameters": {"type": "object"},
     "method": {"type": ["object", "null"]},

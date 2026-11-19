@@ -41,4 +41,11 @@
 .clarification-blocker li { font-size:13px; line-height:1.8; }
 .clarification-checklist-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:14px; }
 .clarification-checklist-actions small { color:#aebdd1; }
+.clarification-checklist-actions .button:not(.primary) { background:#263b59; color:#f1f6ff; border:1px solid #7597c7; }
+.clarification-checklist-actions .button:not(.primary):hover { background:#34527b; }
+.clarification-checklist-actions .button:focus-visible { outline:2px solid #c4d8ff; outline-offset:3px; }
+.flow-validation-notice { list-style:none; padding:12px; margin:8px 0; border:1px solid #86682f; border-radius:7px; background:#292317; color:#f4dfad; }
+.flow-validation-notice p { margin:6px 0; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.flow-validation-notice ul { padding-left:20px; font-size:12px; }
 .clarification-complete { color:#68d7a1; }
+.clarification-method-review { margin-top:14px; }

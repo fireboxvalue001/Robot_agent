@@ -16,6 +16,7 @@ from .document_intent.router import router as document_intent_router
 from .document_intent.service import runtime_status as document_intent_runtime_status
 from .mqtt_service import mqtt_service
 from .execution_history import router as execution_history_router
+from .manual_import import router as manual_import_router
 from .planning_service import plan_natural_language
 from .local_semantic_adapter import resolve_local_semantic
 from .planner.router import planner_runtime_status, router as planner_router
@@ -37,6 +38,7 @@ MAX_AUDIO_SIZE = 3 * 1024 * 1024
 META_OPERATION_LIBRARY = FRONTEND_DIR / "data" / "meta-operations.json"
 SPATIAL_LOCATION_LIBRARY = FRONTEND_DIR / "data" / "spatial-locations.json"
 PUBLIC_ASSETS = {
+    "manual-import.js",
     "operation-display.js", "execution-history.js", "extraction-flow.js", "extraction-flow.css",
     "app.js", "document-intent.js", "index.html", "meta-operation.css", "mqtt-input.js",
     "planner-controls.css", "styles.css", "voice-input.js",
@@ -60,6 +62,7 @@ app = FastAPI(title="VD10 Visual Workflow with ASR and MQTT", version="0.3.0", l
 app.include_router(planner_router)
 app.include_router(document_intent_router)
 app.include_router(execution_history_router)
+app.include_router(manual_import_router)
 
 
 class AsrTimingRequest(BaseModel):

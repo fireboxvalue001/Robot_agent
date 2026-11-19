@@ -11,7 +11,8 @@
       "env_file": ["./server.env"],
       "environment": {
         "MQTT_ENABLED": "false",
-        "MQTT_HISTORY_DIR": "/var/lib/vd10/mqtt_history"
+        "MQTT_HISTORY_DIR": "/var/lib/vd10/mqtt_history",
+        "MANUAL_IMPORT_DB": "/var/lib/vd10/manual-capabilities.sqlite3"
       },
       "ports": ["127.0.0.1:8877:8877"],
       "volumes": ["app-data:/var/lib/vd10"],
